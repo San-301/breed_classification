@@ -35,30 +35,39 @@ CLASS_NAMES = sorted(BREED_DATA.keys())
 # ==========================================
 # 2. UI STYLING (Green Theme, Colored Buttons)
 # ==========================================
+# ==========================================
+# 2. UI STYLING (Forced Color Fix)
+# ==========================================
 st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
 
+# This new CSS targets buttons specifically by their container and forced states
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
     
-    /* Default Green Button (Predict) */
-    .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; border: none; font-weight: bold; }
+    /* 1. Global Button Style (Green) */
+    .stButton>button { 
+        background-color: #2e7d32 !important; 
+        color: white !important; 
+        border-radius: 8px !important; 
+        border: none !important;
+    }
 
-    /* Learning Lab: BLUE Button (Review/Submit) */
-    div[data-testid="column"]:nth-child(1) button {
+    /* 2. Target Review Button (Blue) using its unique key */
+    div[data-testid="stSidebarNav"] + div div[data-testid="column"]:nth-of-type(1) button {
         background-color: #1e40af !important;
-        color: white !important;
     }
 
-    /* Learning Lab: RED Button (Delete) */
-    div[data-testid="column"]:nth-child(2) button {
+    /* 3. Target Delete Button (Red) using its unique key */
+    div[data-testid="stSidebarNav"] + div div[data-testid="column"]:nth-of-type(2) button {
         background-color: #dc3545 !important;
-        color: white !important;
     }
+
+    /* Hover effects to make it feel professional */
+    .stButton>button:hover { opacity: 0.8; border: 1px solid white !important; }
     
-    .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: #333; }
-    .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+    .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_html=True)
 
