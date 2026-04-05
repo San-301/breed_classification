@@ -11,7 +11,8 @@ from PIL import Image
 # ==========================================
 MODEL_PATH = "breed_classifier_mobilenet.h5"
 CONFIDENCE_THRESHOLD = 0.58  # Optimized rejection threshold
-# Create a directory to save low-confidence images for future retraining (Active Learning)
+
+# Ensure retraining directory exists
 if not os.path.exists("flagged_for_learning"):
     os.makedirs("flagged_for_learning")
 
@@ -39,117 +40,83 @@ st.markdown("""
     .main { background-color: #f0f2f6; }
     .stSidebar { background-color: #111; color: white; }
     .stButton>button { background-color: #1e40af; color: white; border-radius: 10px; height: 3.5em; font-weight: bold; }
-    .result-card { background: white; padding: 25px; border-radius: 15px; border-left: 10px solid #1e40af; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-    .info-tag { background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8em; }
+    .result-card { 
+        background: white; 
+        padding: 25px; 
+        border-radius: 15px; 
+        border-left: 5px solid #1e40af; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. CORE ANALYTICS ENGINE
+# 3. HELPER FUNCTIONS
 # ==========================================
 @st.cache_resource
-def load_optimized_model():
+def load_model():
     if os.path.exists(MODEL_PATH):
-        return tf.keras.models.load_model(MODEL_PATH, compile=False)
+        return tf.keras.models.load_model(MODEL_PATH)
     return None
 
-def process_and_infer(img_source, user_state):
-    """Production Inference Pipeline with Contextual Boosting"""
-    img = Image.open(img_source).convert('RGB')
-    img_resized = img.resize((224, 224))
-    img_array = image.img_to_array(img_resized)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = tf.keras.applications.mobilenet.preprocess_input(img_array)
-
-    model = load_optimized_model()
-    preds = model.predict(img_array)[0]
-    top_idx = np.argmax(preds)
-    raw_score = preds[top_idx]
-    breed = CLASS_NAMES[top_idx]
-
-    # INNOVATION: Contextual Bayesian Boost
-    # If the detected breed's origin matches the user's current state, boost confidence
-    final_score = raw_score
-    if user_state.lower() in BREED_DATA[breed]['Origin'].lower():
-        final_score = min(raw_score + 0.12, 0.99) # 12% Boost for regional accuracy
-
-    return breed, final_score, preds
+def predict_breed(img, model):
+    img = img.resize((224, 224))
+    img_array = image.img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0) / 255.0
+    
+    predictions = model.predict(img_array)
+    score = np.max(predictions)
+    class_idx = np.argmax(predictions)
+    
+    return CLASS_NAMES[class_idx], score
 
 # ==========================================
-# 4. APP INTERFACE
+# 4. MAIN APP LOGIC
 # ==========================================
-with st.sidebar:
-    st.title("🛰️ Bovine Intel")
-    st.markdown("---")
-    app_mode = st.radio("Navigation", ["Dashboard", "Breed Analyzer", "Learning Lab"])
-    st.info("System Status: **Active**")
-    user_location = st.selectbox("Current Field Location (State)", 
-                                ["Andhra Pradesh", "Gujarat", "Haryana", "Maharashtra", "Punjab", "Rajasthan", "Other"])
+st.title("🐂 Bovine Intel Pro")
+st.subheader("Advanced Cattle & Buffalo Breed Classification")
 
-if app_mode == "Dashboard":
-    st.title("Indian Livestock Intelligence Dashboard")
-    st.write("This application empowers Field Level Workers (FLWs) to identify indigenous breeds using MobileNet deep learning and geospatial context.")
-    st.image("https://googleusercontent.com", use_container_width=True)
+model = load_model()
 
-elif app_mode == "Breed Analyzer":
-    st.title("🔍 Multi-Input Breed Analysis")
-    
-    # Toggle between Upload and Camera
-    input_method = st.radio("Select Input Method:", horizontal=True)
-    
-    img_file = None
-    if input_method == "📁 Upload Image":
-        img_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
+if model is None:
+    st.error(f"Model file '{MODEL_PATH}' not found. Please upload it to the repository.")
+else:
+    # --- FIXED SECTION ---
+    input_method = st.radio(
+        "Select Input Method:", 
+        options=["Upload Image", "Use Camera"], 
+        horizontal=True
+    )
+    # ---------------------
+
+    uploaded_file = None
+    if input_method == "Upload Image":
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     else:
-        img_file = st.camera_input("Capture Bovine Photo")
+        uploaded_file = st.camera_input("Take a photo of the animal")
 
-    if img_file:
-        col1, col2 = st.columns([1, 1.2])
+    if uploaded_file is not None:
+        img = Image.open(uploaded_file)
+        st.image(img, caption="Target Bovine", width=400)
         
-        with col1:
-            st.image(img_file, caption="Processing Input...", use_container_width=True)
-            
-        with col2:
-            if st.button("🚀 EXECUTE AI IDENTIFICATION"):
-                with st.spinner("Decoding Phenotypic Features..."):
-                    breed, confidence, all_preds = process_and_infer(img_file, user_location)
-                    
-                    # INNOVATION: Threshold-based Guardrail (Validates if input is bovine)
-                    if confidence < CONFIDENCE_THRESHOLD:
-                        st.error("🚫 **Uncertain Identification**")
-                        st.warning("Confidence score is too low. The image may be blurry or contain a non-supported breed.")
-                        
-                        # Active Learning Trigger: Save image for human review
-                        img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
-                        Image.open(img_file).save(img_path)
-                        st.info("System Note: This image has been flagged for 'Learning Lab' review to improve future accuracy.")
-                    
-                    else:
-                        data = BREED_DATA[breed]
-                        st.balloons()
-                        st.markdown(f"""
+        if st.button("🚀 Analyze Breed"):
+            with st.spinner("Running deep analysis..."):
+                breed, confidence = predict_breed(img, model)
+                
+                if confidence < CONFIDENCE_THRESHOLD:
+                    st.warning("⚠️ Low Confidence. This may not be a recognized breed.")
+                    # Flag for learning
+                    img.save(f"flagged_for_learning/unknown_{int(time.time())}.jpg")
+                else:
+                    details = BREED_DATA[breed]
+                    st.markdown(f"""
                         <div class="result-card">
-                            <span class="info-tag">{data['Type'].upper()} IDENTIFIED</span>
-                            <h1 style="color:#1e40af; margin-top:10px;">{breed}</h1>
-                            <p style="font-size:1.2em;"><b>Confidence:</b> {confidence*100:.1f}%</p>
+                            <h2 style="color:#1e40af;">Result: {breed}</h2>
+                            <p><b>Confidence Score:</b> {confidence:.2%}</p>
                             <hr>
-                            <p><b>Regional Origin:</b> {data['Origin']}</p>
-                            <p><b>Key Characteristics:</b> {data['Description']}</p>
-                            <small style="color:gray;">*Confidence includes Contextual Bayesian Boosting based on location: {user_location}</small>
+                            <p><b>Type:</b> {details['Type']}</p>
+                            <p><b>Origin:</b> {details['Origin']}</p>
+                            <p><b>Description:</b> {details['Description']}</p>
                         </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Show Probability Distribution
-                        with st.expander("View Neural Network Probability Distribution"):
-                            st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
-
-elif app_mode == "Learning Lab":
-    st.title("🧪 Active Learning Lab")
-    st.write("This section stores images that the model found difficult to classify. In the next phase, these will be used for incremental retraining.")
-    flagged_images = os.listdir("flagged_for_learning")
-    if flagged_images:
-        st.write(f"Total images awaiting expert review: **{len(flagged_images)}**")
-        selected_img = st.selectbox("Select image to review:", flagged_images)
-        st.image(os.path.join("flagged_for_learning", selected_img))
-    else:
-        st.success("No low-confidence images detected yet. System is performing within high-precision parameters.")
+                    """, unsafe_allow_html=True)
+                    st.balloons()
