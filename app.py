@@ -95,7 +95,7 @@ elif app_mode == "Breed Analyzer":
     st.title("🔍 Multi-Input Breed Analysis")
     
     # Toggle between Upload and Camera
-    input_method = st.radio("Select Input Method:",, horizontal=True)
+    input_method = st.radio("Select Input Method:", horizontal=True)
     
     img_file = None
     if input_method == "📁 Upload Image":
