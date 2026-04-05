@@ -33,23 +33,33 @@ BREED_DATA = {
 CLASS_NAMES = sorted(BREED_DATA.keys())
 
 # ==========================================
-# 2. UI STYLING (Forced Button Colors)
+# 2. UI STYLING (Forced White Sidebar Text)
 # ==========================================
-st.set_page_config(page_title="Breed Classification", layout="wide", page_icon="🐂")
+st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
 
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
     
+    /* FORCE SIDEBAR TEXT TO WHITE */
+    section[data-testid="stSidebar"] .st-emotion-cache-17l6ba3, 
+    section[data-testid="stSidebar"] p, 
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span {
+        color: white !important;
+        font-weight: 500 !important;
+    }
+
     /* Global Style for all buttons (Default Green) */
     div.stButton > button {
         background-color: #2e7d32 !important;
         color: white !important;
         border-radius: 8px !important;
         border: none !important;
-        height: 3em !important;
+        height: 3.5em !important;
         width: 100% !important;
+        font-weight: bold !important;
     }
 
     /* Target FIRST Column Button (Submit Review -> BLUE) */
@@ -63,8 +73,10 @@ st.markdown("""
     }
 
     /* Professional Card Styling */
-    .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 10px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .result-card { background: white; padding: 25px; border-radius: 12px; border-left: 10px solid #2e7d32; box-shadow: 0 4px 20px rgba(0,0,0,0.1); color: #333; }
     .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+    
+    img { image-rendering: auto; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
