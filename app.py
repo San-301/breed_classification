@@ -35,7 +35,7 @@ CLASS_NAMES = sorted(BREED_DATA.keys())
 # ==========================================
 # 2. UI STYLING (Forced Button Colors)
 # ==========================================
-st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
+st.set_page_config(page_title="Breed Classification", layout="wide", page_icon="🐂")
 
 st.markdown("""
     <style>
@@ -101,7 +101,7 @@ def process_and_infer(img_source, user_state):
 # 3. APP INTERFACE
 # ==========================================
 with st.sidebar:
-    st.title("🛰️ Bovine Intel")
+    st.title("Home")
     app_mode = st.radio("Go To:", ["Dashboard", "Breed Analyzer", "Learning Lab"])
     st.markdown("---")
     user_location = st.selectbox("Current Field Location", 
@@ -110,6 +110,7 @@ with st.sidebar:
 if app_mode == "Dashboard":
     st.title("Indian Livestock Intelligence")
     st.write("Professional breed identification using geospatial context.")
+    st.write("This Breed Analyzer is used for classification of Indian Cows and Buffaloes")
 
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Breed Analysis")
