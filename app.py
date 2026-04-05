@@ -4,6 +4,7 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 import os
 import time
+import shutil  # Added for moving files
 from PIL import Image
 
 # ==========================================
@@ -12,8 +13,10 @@ from PIL import Image
 MODEL_PATH = "breed_classifier_mobilenet (2).h5" 
 CONFIDENCE_THRESHOLD = 0.58 
 
-if not os.path.exists("flagged_for_learning"):
-    os.makedirs("flagged_for_learning")
+# Ensure directories exist
+for folder in ["flagged_for_learning", "training_queue"]:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
 BREED_DATA = {
     "Bhadawari": {"Type": "Buffalo", "Origin": "UP & MP", "Description": "High-fat milk breed, heat-tolerant."},
@@ -30,7 +33,7 @@ BREED_DATA = {
 CLASS_NAMES = sorted(BREED_DATA.keys())
 
 # ==========================================
-# 2. UI STYLING (Green Theme, No Blue Lines)
+# 2. UI STYLING
 # ==========================================
 st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
 
@@ -38,11 +41,11 @@ st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
-    /* Green Accent Button */
     .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; font-size: 1.2em; border: none; }
-    /* Result Card with Green Line */
     .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: #333; }
     .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+    /* Delete button styling */
+    div[data-testid="column"]:nth-child(2) button { background-color: #dc3545 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -67,7 +70,6 @@ def process_and_infer(img_source, user_state):
     raw_score = preds[top_idx]
     breed = CLASS_NAMES[top_idx]
 
-    # Impact of Region: Adds 12% confidence if region matches origin
     final_score = raw_score
     if user_state.lower() in BREED_DATA[breed]['Origin'].lower():
         final_score = min(raw_score + 0.12, 0.99) 
@@ -83,7 +85,6 @@ with st.sidebar:
     st.markdown("---")
     user_location = st.selectbox("Current Field Location", 
                                 ["Andhra Pradesh", "Gujarat", "Haryana", "Maharashtra", "Punjab", "Rajasthan", "Other"])
-    st.caption("Note: Selecting the correct region improves identification accuracy based on local breed prevalence.")
 
 if app_mode == "Dashboard":
     st.title("Indian Livestock Intelligence")
@@ -91,70 +92,81 @@ if app_mode == "Dashboard":
 
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Breed Analysis")
-    
     img_file = st.file_uploader("Upload Image for Identification", type=["jpg", "png", "jpeg"])
 
     if img_file:
-        # 1. Place Image
         st.image(img_file, use_container_width=True)
-        
-        # 2. Place Predict Button directly below image
         if st.button("Predict"):
             breed, confidence, all_preds = process_and_infer(img_file, user_location)
             
             if breed is None:
                 st.error("Model file missing.")
             elif confidence < CONFIDENCE_THRESHOLD:
-                # Uncertain Identification Message
                 st.error("⚠️ Uncertain Identification")
-                st.warning("Low confidence detected. Image moved to Learning Lab for review.")
+                st.warning("Low confidence. Image moved to Learning Lab.")
                 img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                 Image.open(img_file).save(img_path)
             else:
-                # 3. Show Stats below button if correct
                 data = BREED_DATA[breed]
                 st.markdown(f"""
                 <div class="result-card">
                     <span class="info-tag">{data['Type'].upper()}</span>
                     <h2 style="margin: 10px 0;">{breed}</h2>
-                    <p><b>Confidence Score:</b> {confidence*100:.1f}%</p>
+                    <p><b>Confidence:</b> {confidence*100:.1f}%</p>
                     <p><b>Origin:</b> {data['Origin']}</p>
-                    <p style="font-style: italic;">{data['Description']}</p>
+                    <p><i>{data['Description']}</i></p>
                 </div>
                 """, unsafe_allow_html=True)
-                
                 st.write("### Probability Distribution")
                 st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
 elif app_mode == "Learning Lab":
     st.title("🧪 Smart Review Lab")
-    flagged_images = os.listdir("flagged_for_learning")
+    flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
     if flagged_images:
         col1, col2 = st.columns([1, 1])
         with col1:
-            selected_img = st.selectbox("Select flagged image:", flagged_images)
-            raw_img = Image.open(os.path.join("flagged_for_learning", selected_img))
+            selected_img = st.selectbox("Select image to review:", flagged_images)
+            img_path = os.path.join("flagged_for_learning", selected_img)
+            raw_img = Image.open(img_path)
             st.image(raw_img, caption="Original Flagged Image")
         
         with col2:
             st.subheader("Innovative Review: Focus Tool")
-            st.write("Isolate the animal to remove background noise (Helpful for better labeling).")
-            
-            # Innovative Feature: Manual "Focus" slider to help user suggest a crop
             width, height = raw_img.size
             zoom = st.slider("Focus / Zoom Level", 50, 100, 100)
             
+            final_img = raw_img
             if zoom < 100:
                 left = (width * (100 - zoom) / 200)
                 top = (height * (100 - zoom) / 200)
                 right = width - left
                 bottom = height - top
-                cropped_img = raw_img.crop((left, top, right, bottom))
-                st.image(cropped_img, caption="Zoomed Focus for Re-Labeling")
+                final_img = raw_img.crop((left, top, right, bottom))
+                st.image(final_img, caption="Zoomed Focus")
                 
             new_label = st.selectbox("Suggest Correct Breed:", ["Unknown"] + CLASS_NAMES)
-            if st.button("Submit Review"):
-                st.success(f"Image tagged as {new_label}. Thank you for improving the AI!")
+            
+            btn_col1, btn_col2 = st.columns(2)
+            
+            with btn_col1:
+                if st.button("Submit Review"):
+                    target_dir = os.path.join("training_queue", new_label)
+                    os.makedirs(target_dir, exist_ok=True)
+                    # Save the (possibly cropped) image to the new folder
+                    final_img.save(os.path.join(target_dir, selected_img))
+                    # Remove from flagged folder
+                    os.remove(img_path)
+                    st.success(f"Moved to {new_label} queue. AI data improved!")
+                    time.sleep(1)
+                    st.rerun()
+
+            with btn_col2:
+                if st.button("🗑️ Delete"):
+                    os.remove(img_path)
+                    st.warning("Image permanently deleted.")
+                    time.sleep(1)
+                    st.rerun()
     else:
-        st.info("No images flagged for review. Everything looks good!")
+        st.info("No images flagged for review.")
