@@ -4,7 +4,7 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 import os
 import time
-import shutil  # Added for moving files
+import shutil
 from PIL import Image
 
 # ==========================================
@@ -13,7 +13,9 @@ from PIL import Image
 MODEL_PATH = "breed_classifier_mobilenet (2).h5" 
 CONFIDENCE_THRESHOLD = 0.58 
 
-# Ensure directories exist
+# Folders: 
+# flagged_for_learning -> The "Inbox" for low-confidence images.
+# training_queue -> The "Sorted" folder where reviewed images are moved.
 for folder in ["flagged_for_learning", "training_queue"]:
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -41,10 +43,9 @@ st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
-    .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; font-size: 1.2em; border: none; }
+    .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; font-size: 1.1em; border: none; }
     .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: #333; }
     .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
-    /* Delete button styling */
     div[data-testid="column"]:nth-child(2) button { background-color: #dc3545 !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -88,11 +89,18 @@ with st.sidebar:
 
 if app_mode == "Dashboard":
     st.title("Indian Livestock Intelligence")
-    st.write("Professional grade breed identification system.")
+    st.write("Real-time breed classification and geospatial mapping.")
 
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Breed Analysis")
-    img_file = st.file_uploader("Upload Image for Identification", type=["jpg", "png", "jpeg"])
+    
+    # ADDED CAMERA AND UPLOAD INPUT
+    input_type = st.radio("Select Input Source:", ["Upload File", "Take Photo"], horizontal=True)
+    
+    if input_type == "Upload File":
+        img_file = st.file_uploader("Choose a photo", type=["jpg", "png", "jpeg"])
+    else:
+        img_file = st.camera_input("Capture live photo")
 
     if img_file:
         st.image(img_file, use_container_width=True)
@@ -103,14 +111,14 @@ elif app_mode == "Breed Analyzer":
                 st.error("Model file missing.")
             elif confidence < CONFIDENCE_THRESHOLD:
                 st.error("⚠️ Uncertain Identification")
-                st.warning("Low confidence. Image moved to Learning Lab.")
+                st.warning("Low confidence detected. Sent to Learning Lab for expert review.")
                 img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                 Image.open(img_file).save(img_path)
             else:
                 data = BREED_DATA[breed]
                 st.markdown(f"""
                 <div class="result-card">
-                    <span class="info-tag">{data['Type'].upper()}</span>
+                    <span class="info-tag">{data['Type'].upper()} IDENTIFIED</span>
                     <h2 style="margin: 10px 0;">{breed}</h2>
                     <p><b>Confidence:</b> {confidence*100:.1f}%</p>
                     <p><b>Origin:</b> {data['Origin']}</p>
@@ -130,7 +138,7 @@ elif app_mode == "Learning Lab":
             selected_img = st.selectbox("Select image to review:", flagged_images)
             img_path = os.path.join("flagged_for_learning", selected_img)
             raw_img = Image.open(img_path)
-            st.image(raw_img, caption="Original Flagged Image")
+            st.image(raw_img, caption="Flagged Image")
         
         with col2:
             st.subheader("Innovative Review: Focus Tool")
@@ -144,7 +152,7 @@ elif app_mode == "Learning Lab":
                 right = width - left
                 bottom = height - top
                 final_img = raw_img.crop((left, top, right, bottom))
-                st.image(final_img, caption="Zoomed Focus")
+                st.image(final_img, caption="Cropped Focus Area")
                 
             new_label = st.selectbox("Suggest Correct Breed:", ["Unknown"] + CLASS_NAMES)
             
@@ -152,21 +160,20 @@ elif app_mode == "Learning Lab":
             
             with btn_col1:
                 if st.button("Submit Review"):
+                    # DESTINATION: Moved to training_queue/[BreedName]/
                     target_dir = os.path.join("training_queue", new_label)
                     os.makedirs(target_dir, exist_ok=True)
-                    # Save the (possibly cropped) image to the new folder
-                    final_img.save(os.path.join(target_dir, selected_img))
-                    # Remove from flagged folder
+                    final_img.save(os.path.join(target_dir, f"reviewed_{selected_img}"))
                     os.remove(img_path)
-                    st.success(f"Moved to {new_label} queue. AI data improved!")
+                    st.success(f"Moved to training_queue/{new_label}. System updated!")
                     time.sleep(1)
                     st.rerun()
 
             with btn_col2:
                 if st.button("🗑️ Delete"):
                     os.remove(img_path)
-                    st.warning("Image permanently deleted.")
+                    st.warning("Deleted successfully.")
                     time.sleep(1)
                     st.rerun()
     else:
-        st.info("No images flagged for review.")
+        st.info("No images flagged for review. Your dataset is clean!")
