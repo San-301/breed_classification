@@ -13,9 +13,7 @@ from PIL import Image
 MODEL_PATH = "breed_classifier_mobilenet (2).h5" 
 CONFIDENCE_THRESHOLD = 0.58 
 
-# Folders: 
-# flagged_for_learning -> The "Inbox" for low-confidence images.
-# training_queue -> The "Sorted" folder where reviewed images are moved.
+# Local directory setup
 for folder in ["flagged_for_learning", "training_queue"]:
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -35,7 +33,7 @@ BREED_DATA = {
 CLASS_NAMES = sorted(BREED_DATA.keys())
 
 # ==========================================
-# 2. UI STYLING
+# 2. UI STYLING (Custom Button Colors)
 # ==========================================
 st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
 
@@ -43,10 +41,24 @@ st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
-    .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; font-size: 1.1em; border: none; }
-    .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); color: #333; }
+    
+    /* Default Green Button (Predict) */
+    .stButton>button { background-color: #2e7d32; color: white; border-radius: 8px; width: 100%; height: 3em; border: none; }
+
+    /* BLUE Button Logic (Review) */
+    div[data-testid="column"]:nth-child(1) button {
+        background-color: #1e40af !important;
+        color: white !important;
+    }
+
+    /* RED Button Logic (Delete) */
+    div[data-testid="column"]:nth-child(2) button {
+        background-color: #dc3545 !important;
+        color: white !important;
+    }
+    
+    .result-card { background: white; padding: 20px; border-radius: 12px; border-left: 8px solid #2e7d32; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
-    div[data-testid="column"]:nth-child(2) button { background-color: #dc3545 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -66,7 +78,7 @@ def process_and_infer(img_source, user_state):
     model = load_optimized_model()
     if model is None: return None, 0, None
         
-    preds = model.predict(img_array)[0]
+    preds = model.predict(img_array)
     top_idx = np.argmax(preds)
     raw_score = preds[top_idx]
     breed = CLASS_NAMES[top_idx]
@@ -89,43 +101,32 @@ with st.sidebar:
 
 if app_mode == "Dashboard":
     st.title("Indian Livestock Intelligence")
-    st.write("Real-time breed classification and geospatial mapping.")
+    st.write("Real-time breed classification system.")
 
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Breed Analysis")
-    
-    # ADDED CAMERA AND UPLOAD INPUT
     input_type = st.radio("Select Input Source:", ["Upload File", "Take Photo"], horizontal=True)
     
-    if input_type == "Upload File":
-        img_file = st.file_uploader("Choose a photo", type=["jpg", "png", "jpeg"])
-    else:
-        img_file = st.camera_input("Capture live photo")
+    img_file = st.file_uploader("Choose a photo", type=["jpg", "png", "jpeg"]) if input_type == "Upload File" else st.camera_input("Capture live photo")
 
     if img_file:
         st.image(img_file, use_container_width=True)
         if st.button("Predict"):
             breed, confidence, all_preds = process_and_infer(img_file, user_location)
             
-            if breed is None:
-                st.error("Model file missing.")
-            elif confidence < CONFIDENCE_THRESHOLD:
+            if confidence < CONFIDENCE_THRESHOLD:
                 st.error("⚠️ Uncertain Identification")
-                st.warning("Low confidence detected. Sent to Learning Lab for expert review.")
                 img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                 Image.open(img_file).save(img_path)
+                st.warning("Sent to Learning Lab.")
             else:
                 data = BREED_DATA[breed]
-                st.markdown(f"""
-                <div class="result-card">
-                    <span class="info-tag">{data['Type'].upper()} IDENTIFIED</span>
-                    <h2 style="margin: 10px 0;">{breed}</h2>
+                st.markdown(f"""<div class="result-card">
+                    <span class="info-tag">{data['Type'].upper()}</span>
+                    <h2>{breed}</h2>
                     <p><b>Confidence:</b> {confidence*100:.1f}%</p>
                     <p><b>Origin:</b> {data['Origin']}</p>
-                    <p><i>{data['Description']}</i></p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.write("### Probability Distribution")
+                </div>""", unsafe_allow_html=True)
                 st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
 elif app_mode == "Learning Lab":
@@ -133,47 +134,44 @@ elif app_mode == "Learning Lab":
     flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
     if flagged_images:
-        col1, col2 = st.columns([1, 1])
+        col1, col2 = st.columns(2)
         with col1:
-            selected_img = st.selectbox("Select image to review:", flagged_images)
+            selected_img = st.selectbox("Select image:", flagged_images)
             img_path = os.path.join("flagged_for_learning", selected_img)
             raw_img = Image.open(img_path)
             st.image(raw_img, caption="Flagged Image")
         
         with col2:
-            st.subheader("Innovative Review: Focus Tool")
-            width, height = raw_img.size
-            zoom = st.slider("Focus / Zoom Level", 50, 100, 100)
-            
+            st.subheader("Focus Tool")
+            zoom = st.slider("Focus Level", 50, 100, 100)
             final_img = raw_img
             if zoom < 100:
-                left = (width * (100 - zoom) / 200)
-                top = (height * (100 - zoom) / 200)
-                right = width - left
-                bottom = height - top
-                final_img = raw_img.crop((left, top, right, bottom))
-                st.image(final_img, caption="Cropped Focus Area")
+                w, h = raw_img.size
+                l = (w * (100 - zoom) / 200)
+                t = (h * (100 - zoom) / 200)
+                final_img = raw_img.crop((l, t, w-l, h-t))
+                st.image(final_img, caption="Cropped Focus")
                 
-            new_label = st.selectbox("Suggest Correct Breed:", ["Unknown"] + CLASS_NAMES)
+            new_label = st.selectbox("Correct Breed:", ["Unknown"] + CLASS_NAMES)
             
             btn_col1, btn_col2 = st.columns(2)
-            
             with btn_col1:
+                # BLUE BUTTON
                 if st.button("Submit Review"):
-                    # DESTINATION: Moved to training_queue/[BreedName]/
                     target_dir = os.path.join("training_queue", new_label)
                     os.makedirs(target_dir, exist_ok=True)
-                    final_img.save(os.path.join(target_dir, f"reviewed_{selected_img}"))
+                    final_img.save(os.path.join(target_dir, f"rev_{selected_img}"))
                     os.remove(img_path)
-                    st.success(f"Moved to training_queue/{new_label}. System updated!")
+                    st.success("Moved to Training Queue!")
                     time.sleep(1)
                     st.rerun()
 
             with btn_col2:
+                # RED BUTTON
                 if st.button("🗑️ Delete"):
                     os.remove(img_path)
-                    st.warning("Deleted successfully.")
+                    st.warning("Deleted.")
                     time.sleep(1)
                     st.rerun()
     else:
-        st.info("No images flagged for review. Your dataset is clean!")
+        st.info("No images for review.")
