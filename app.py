@@ -98,19 +98,16 @@ if app_mode == "Dashboard":
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Multi-Input Breed Analysis")
     
-    # FIXED: Added the required list of options
-    input_method = st.radio(
-        label="Select Input Method:", 
-        options=, 
-        horizontal=True
-    )
-    
+    # --- CLEAN ALTERNATIVE TO AVOID SYNTAX ERROR ---
+    input_options = ["Upload", "Camera"]
+    input_method = st.radio("Select Input Method:", options=input_options, horizontal=True)
+
     img_file = None
-    # FIXED: Labels now match the options list exactly
-    if input_method == "📁 Upload Image":
+    if input_method == "Upload":
         img_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
     else:
         img_file = st.camera_input("Capture Bovine Photo")
+    # -----------------------------------------------
 
     if img_file:
         col1, col2 = st.columns([1, 1.2])
@@ -123,11 +120,12 @@ elif app_mode == "Breed Analyzer":
                     breed, confidence, all_preds = process_and_infer(img_file, user_location)
                     
                     if breed is None:
-                        st.error("Model file not found. Check GitHub for 'breed_classifier_mobilenet (2).h5'")
+                        st.error(f"Model file '{MODEL_PATH}' not found in repository.")
                     elif confidence < CONFIDENCE_THRESHOLD:
                         st.error("🚫 Uncertain Identification")
                         img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                         Image.open(img_file).save(img_path)
+                        st.warning("Low confidence. Image flagged for review.")
                     else:
                         data = BREED_DATA[breed]
                         st.balloons()
@@ -141,12 +139,15 @@ elif app_mode == "Breed Analyzer":
                             <p><b>Key Characteristics:</b> {data['Description']}</p>
                         </div>
                         """, unsafe_allow_html=True)
+                        
+                        with st.expander("View Probability Distribution"):
+                            st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
 elif app_mode == "Learning Lab":
     st.title("🧪 Active Learning Lab")
     flagged_images = os.listdir("flagged_for_learning")
     if flagged_images:
-        selected_img = st.selectbox("Select image:", flagged_images)
+        selected_img = st.selectbox("Select image to review:", flagged_images)
         st.image(os.path.join("flagged_for_learning", selected_img))
     else:
         st.success("No low-confidence images detected yet.")
