@@ -101,14 +101,15 @@ if app_mode == "Dashboard":
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Multi-Input Breed Analysis")
     
-    # FIXED: Added required options and removed syntax error
+    # Toggle between Upload and Camera
     input_method = st.radio(
-        "Select Input Method:", 
+        label="Select Input Method:", 
         options=, 
         horizontal=True
     )
     
     img_file = None
+    # Ensure these strings match the options above exactly
     if input_method == "📁 Upload Image":
         img_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
     else:
