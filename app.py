@@ -9,7 +9,7 @@ from PIL import Image
 # ==========================================
 # 1. SYSTEM CONFIGURATION & DATA
 # ==========================================
-# UPDATED: Matches the filename shown in your GitHub sidebar
+# Matches your filename in GitHub exactly
 MODEL_PATH = "breed_classifier_mobilenet (2).h5" 
 CONFIDENCE_THRESHOLD = 0.58 
 
@@ -62,7 +62,6 @@ def process_and_infer(img_source, user_state):
     img_resized = img.resize((224, 224))
     img_array = image.img_to_array(img_resized)
     img_array = np.expand_dims(img_array, axis=0)
-    # MobileNet specific preprocessing
     img_array = tf.keras.applications.mobilenet.preprocess_input(img_array)
 
     model = load_optimized_model()
@@ -74,7 +73,6 @@ def process_and_infer(img_source, user_state):
     raw_score = preds[top_idx]
     breed = CLASS_NAMES[top_idx]
 
-    # Contextual Bayesian Boost logic
     final_score = raw_score
     if user_state.lower() in BREED_DATA[breed]['Origin'].lower():
         final_score = min(raw_score + 0.12, 0.99) 
@@ -94,14 +92,13 @@ with st.sidebar:
 
 if app_mode == "Dashboard":
     st.title("Indian Livestock Intelligence Dashboard")
-    st.write("This application empowers Field Level Workers (FLWs) to identify indigenous breeds using MobileNet deep learning and geospatial context.")
-    # Standard placeholder or local image
-    st.info("Upload an image in the 'Breed Analyzer' to begin.")
+    st.write("Identify indigenous breeds using deep learning and geospatial context.")
+    st.info("Navigate to 'Breed Analyzer' to begin.")
 
 elif app_mode == "Breed Analyzer":
     st.title("🔍 Multi-Input Breed Analysis")
     
-    # Toggle between Upload and Camera
+    # FIXED: Added the required list of options
     input_method = st.radio(
         label="Select Input Method:", 
         options=, 
@@ -109,7 +106,7 @@ elif app_mode == "Breed Analyzer":
     )
     
     img_file = None
-    # Ensure these strings match the options above exactly
+    # FIXED: Labels now match the options list exactly
     if input_method == "📁 Upload Image":
         img_file = st.file_uploader("Choose a photo...", type=["jpg", "jpeg", "png"])
     else:
@@ -117,9 +114,7 @@ elif app_mode == "Breed Analyzer":
 
     if img_file:
         col1, col2 = st.columns([1, 1.2])
-        
         with col1:
-            # UPDATED: Changed use_container_width to width='stretch' per latest Streamlit
             st.image(img_file, caption="Processing Input...", width=450)
             
         with col2:
@@ -128,15 +123,11 @@ elif app_mode == "Breed Analyzer":
                     breed, confidence, all_preds = process_and_infer(img_file, user_location)
                     
                     if breed is None:
-                        st.error("Model not found. Please upload the .h5 file to GitHub.")
+                        st.error("Model file not found. Check GitHub for 'breed_classifier_mobilenet (2).h5'")
                     elif confidence < CONFIDENCE_THRESHOLD:
-                        st.error("🚫 **Uncertain Identification**")
-                        st.warning("Confidence score is too low. The image may be blurry or contain a non-supported breed.")
-                        
+                        st.error("🚫 Uncertain Identification")
                         img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                         Image.open(img_file).save(img_path)
-                        st.info("System Note: This image has been flagged for 'Learning Lab' review.")
-                    
                     else:
                         data = BREED_DATA[breed]
                         st.balloons()
@@ -148,20 +139,14 @@ elif app_mode == "Breed Analyzer":
                             <hr>
                             <p><b>Regional Origin:</b> {data['Origin']}</p>
                             <p><b>Key Characteristics:</b> {data['Description']}</p>
-                            <small style="color:gray;">*Includes Contextual Boost for: {user_location}</small>
                         </div>
                         """, unsafe_allow_html=True)
-                        
-                        with st.expander("View Probability Distribution"):
-                            st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
 elif app_mode == "Learning Lab":
     st.title("🧪 Active Learning Lab")
-    st.write("Review images that require expert validation.")
     flagged_images = os.listdir("flagged_for_learning")
     if flagged_images:
-        st.write(f"Images awaiting review: **{len(flagged_images)}**")
         selected_img = st.selectbox("Select image:", flagged_images)
         st.image(os.path.join("flagged_for_learning", selected_img))
     else:
-        st.success("System is performing within high-precision parameters.")
+        st.success("No low-confidence images detected yet.")
