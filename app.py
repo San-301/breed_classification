@@ -9,7 +9,7 @@ from PIL import Image
 # ==========================================
 # 1. SYSTEM CONFIGURATION & DATA
 # ==========================================
-MODEL_PATH = "breed_classifier_mobilenet(2).h5"
+MODEL_PATH = "breed_classifier_mobilenet (2).h5"
 CONFIDENCE_THRESHOLD = 0.58  # Optimized rejection threshold
 
 # Ensure retraining directory exists
