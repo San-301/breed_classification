@@ -100,8 +100,9 @@ def process_and_infer(img_source, user_state):
 
     preds = model.predict(img_array)[0]
 
-    top_indices = np.argsort(preds)[-3:][::-1]
+    preds = model.predict(img_array)[0]
 
+    top_indices = np.argsort(preds)[-3:][::-1]
     top_3 = [(CLASS_NAMES[i], float(preds[i])) for i in top_indices]
 
     top1, top2 = top_3[0], top_3[1]
@@ -114,13 +115,15 @@ def process_and_infer(img_source, user_state):
     else:
         final_label = top1[0]
 
-    # Geospatial impact: Increase confidence if region matches origin
-    final_score = raw_score
-    if user_state.lower() in BREED_DATA[breed]['Origin'].lower():
-        final_score = min(raw_score + 0.12, 0.99) 
-
-    return breed, final_score, preds
-
+    # Use top1 confidence as base
+    final_score = top1[1]
+    
+    # Apply geospatial ONLY if valid breed
+    if final_label in BREED_DATA:
+        if user_state.lower() in BREED_DATA[final_label]['Origin'].lower():
+            final_score = min(final_score + 0.12, 0.99)
+    
+    return final_label, final_score, preds, top_3
 # ==========================================
 # 3. APP INTERFACE
 # ==========================================
