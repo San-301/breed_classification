@@ -153,6 +153,8 @@ elif app_mode == "Breed Analyzer":
                 st.warning("Low confidence. Image moved to Learning Lab for review.")
                 img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
                 Image.open(img_file).save(img_path)
+            elif breed == "Ambiguous (Similar breeds)":
+                st.warning("⚠️ Similar breeds detected. Try clearer image.")
             else:
                 data = BREED_DATA[breed]
                 st.markdown(f"""
