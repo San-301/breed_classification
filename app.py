@@ -242,42 +242,63 @@ elif app_mode == "Breed Analyzer":
                 st.warning("No animals detected")
     
             else:
+                # 🟢 Show boxed image + count
                 boxed_img = draw_boxes(img, boxes, scores)
-
+                
                 st.image(boxed_img, caption="Detected Animals", use_container_width=True)
                 st.success(f"🐄 {len(boxes)} cows detected")
                 
-                cols = st.columns(3)  # 3 per row (change to 2 if you want bigger cards)
+                st.divider()  # clean separation
+                
+                # 🟢 GRID VIEW
+                cols = st.columns(3)
                 
                 for i, box in enumerate(boxes):
+                    col = cols[i % 3]
+                
                     x1, y1, x2, y2 = map(int, box)
                     cropped = img.crop((x1, y1, x2, y2))
                 
-                    st.image(cropped, caption=f"Animal {i+1}", use_container_width=True)
-                
                     breed, confidence, all_preds, top3 = process_and_infer(cropped, user_location)
                 
-                    with st.expander(f"Animal {i+1} Details"):
+                    with col:
+                        # 🖼️ Image (fixed size → no blur)
+                        st.image(cropped, width=220)
                 
+                        # 🧠 Compact info (NO big card)
                         if breed not in ["Unknown / Not a cattle",
                                          "Ambiguous (Similar breeds)",
                                          "Possible Hybrid / Unknown Breed"]:
                 
-                            data = BREED_DATA[breed]
-                
                             st.markdown(f"""
-                            <div class="result-card">
-                                <h4 style="color:#2e7d32;">{breed}</h4>
-                                <p><b>Confidence:</b> {confidence*100:.1f}%</p>
+                            <div style="
+                                background:white;
+                                padding:8px;
+                                border-radius:8px;
+                                text-align:center;
+                                box-shadow:0 2px 6px rgba(0,0,0,0.1);
+                                margin-bottom:8px;
+                            ">
+                                <b style="color:#2e7d32;">{breed}</b><br>
+                                <span style="font-size:13px;">{confidence*100:.1f}%</span>
                             </div>
                             """, unsafe_allow_html=True)
                 
                         else:
-                            st.warning(breed)
+                            st.caption(breed)
                 
-                        st.write("Top 3 Predictions:")
-                        for name, score in top3:
-                            st.write(f"{name}: {score:.2f}")
+                        # 🔽 Small expandable (optional, not bulky)
+                        with st.expander("Details"):
+                            st.write("Top 3 Predictions:")
+                            for name, score in top3:
+                                st.write(f"{name}: {score:.2f}")
+                
+                    # spacing between rows
+                    if (i + 1) % 3 == 0:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                
+                # 🟢 ONE clean chart (not repeated)
+                st.divider()
                 st.write("### Probability Distribution")
                 st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
                 
