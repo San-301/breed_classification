@@ -2,4 +2,5 @@ streamlit
 tensorflow>=2.12
 numpy
 Pillow
-pip install ultralytics
+opencv-python-headless
+ultralytics
