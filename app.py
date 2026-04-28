@@ -8,7 +8,7 @@ import shutil
 from PIL import Image
 from ultralytics import YOLO
 
-yolo_model = YOLO("yolov8n.pt")  # lightweight model
+yolo_model = YOLO("yolov8s.pt")  # lightweight model
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION & DATA
@@ -89,59 +89,67 @@ def load_optimized_model():
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
 
-def remove_overlapping_boxes(boxes, iou_threshold=0.75):
-    filtered = []
 
-    for box in boxes:
+def draw_boxes(image, boxes):
+    img_np = np.array(image)
+
+    for i, box in enumerate(boxes):
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(img_np, f"Cow {i+1}", (x1, y1-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+    return img_np    
+def detect_animals(img):
+    results = yolo_model(
+        img,
+        conf=0.25,   # lower → detect all cows
+        iou=0.45     # built-in overlap removal
+    )
+
+    boxes = results[0].boxes.xyxy.cpu().numpy()
+    classes = results[0].boxes.cls.cpu().numpy()
+    scores = results[0].boxes.conf.cpu().numpy()
+
+    animal_boxes = []
+
+    for box, cls, score in zip(boxes, classes, scores):
+        if int(cls) == 19:  # cow
+            animal_boxes.append((box, score))
+
+    # ✅ SORT by confidence (important)
+    animal_boxes = sorted(animal_boxes, key=lambda x: x[1], reverse=True)
+
+    # ✅ KEEP ONLY TOP UNIQUE BOXES
+    final_boxes = []
+    for box, score in animal_boxes:
         x1, y1, x2, y2 = box
+
         keep = True
+        for fb in final_boxes:
+            fx1, fy1, fx2, fy2 = fb
 
-        for f in filtered:
-            fx1, fy1, fx2, fy2 = f
-
-            # Compute IoU
+            # IoU calculation
             inter_x1 = max(x1, fx1)
             inter_y1 = max(y1, fy1)
             inter_x2 = min(x2, fx2)
             inter_y2 = min(y2, fy2)
 
             inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+            area1 = (x2 - x1) * (y2 - y1)
+            area2 = (fx2 - fx1) * (fy2 - fy1)
 
-            box_area = (x2 - x1) * (y2 - y1)
-            f_area = (fx2 - fx1) * (fy2 - fy1)
-
-            union = box_area + f_area - inter_area
-
+            union = area1 + area2 - inter_area
             iou = inter_area / union if union > 0 else 0
 
-            if iou > iou_threshold:
+            if iou > 0.5:
                 keep = False
                 break
 
         if keep:
-            filtered.append(box)
+            final_boxes.append(box)
 
-    return filtered
-    
-def detect_animals(img):
-    results = yolo_model(img, conf = 0.3)
-
-    boxes = results[0].boxes.xyxy.cpu().numpy()
-    classes = results[0].boxes.cls.cpu().numpy()
-    scores = results[0].boxes.conf.cpu().numpy()
-    
-    animal_boxes = []
-
-    for box, cls, score in zip(boxes, classes, scores):
-        label = int(cls)
-
-        # YOLO class IDs for animals (cow = 19, etc.)
-        if label == 19 and score > 0.3 :  # cow class
-            animal_boxes.append(box)
-            
-    animal_boxes = remove_overlapping_boxes(animal_boxes)
-
-    return animal_boxes
+    return final_boxes
     
 def process_and_infer(img_source, user_state):
     if isinstance(img_source, Image.Image):
@@ -248,16 +256,18 @@ elif app_mode == "Breed Analyzer":
                             <p><i>{data['Description']}</i></p>
                         </div>
                         """, unsafe_allow_html=True)
-    
+
+                    boxed_img = draw_boxes(img, boxes)
+                    st.image(boxed_img, caption="Detected Animals", use_container_width=True)
                     # ✅ Always show Top-3
                     st.write("Top 3 Predictions:")
                     for name, score in top3:
                         st.write(f"{name} : {score:.2f}")
 
                 st.write("### Probability Distribution")
-                for i, box in enumerate(boxes):
-                    st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
-                    
+                st.write("### Probability Distribution")
+                st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
+                
 elif app_mode == "Learning Lab":
     st.title("🧪 Smart Review Lab")
     flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
