@@ -7,6 +7,7 @@ import time
 import shutil
 from PIL import Image
 from ultralytics import YOLO
+import cv
 
 yolo_model = YOLO("yolov8s.pt")  # lightweight model
 
