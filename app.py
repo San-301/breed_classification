@@ -107,7 +107,10 @@ def detect_animals(img):
     return animal_boxes
     
 def process_and_infer(img_source, user_state):
-    img = Image.open(img_source).convert('RGB')
+    if isinstance(img_source, Image.Image):
+        img = img_source.convert('RGB')
+    else:
+        img = Image.open(img_source).convert('RGB')
     img_resized = img.resize((224, 224))
     img_array = image.img_to_array(img_resized)
     img_array = np.expand_dims(img_array, axis=0)
@@ -168,11 +171,7 @@ elif app_mode == "Breed Analyzer":
         st.image(img_file, use_container_width=True)
 
         if st.button("Predict"):
-    
-            if isinstance(img_source, Image.Image):
-                img = img_source
-            else:
-                img = Image.open(img_source).convert('RGB')
+            img = Image.open(img_source).convert('RGB')
                 
             boxes = detect_animals(img)
     
