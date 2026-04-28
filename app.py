@@ -89,7 +89,7 @@ def load_optimized_model():
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
 
-def remove_overlapping_boxes(boxes, iou_threshold=0.5):
+def remove_overlapping_boxes(boxes, iou_threshold=0.75):
     filtered = []
 
     for box in boxes:
@@ -124,7 +124,7 @@ def remove_overlapping_boxes(boxes, iou_threshold=0.5):
     return filtered
     
 def detect_animals(img):
-    results = yolo_model(img, conf = 0.6)
+    results = yolo_model(img, conf = 0.3)
 
     boxes = results[0].boxes.xyxy.cpu().numpy()
     classes = results[0].boxes.cls.cpu().numpy()
@@ -136,7 +136,7 @@ def detect_animals(img):
         label = int(cls)
 
         # YOLO class IDs for animals (cow = 19, etc.)
-        if label == 19 and score > 0.6 :  # cow class
+        if label == 19 and score > 0.3 :  # cow class
             animal_boxes.append(box)
             
     animal_boxes = remove_overlapping_boxes(animal_boxes)
