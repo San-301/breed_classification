@@ -171,7 +171,6 @@ elif app_mode == "Breed Analyzer":
         st.image(img_file, use_container_width=True)
 
         if st.button("Predict"):
-            img = Image.open(img_source).convert('RGB')
                 
             boxes = detect_animals(img)
     
