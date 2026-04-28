@@ -148,7 +148,7 @@ elif app_mode == "Breed Analyzer":
         if st.button("Predict"):
             breed, confidence, all_preds, top3 = process_and_infer(img_file, user_location)
             
-            if confidence < CONFIDENCE_THRESHOLD:
+            if  breed == "Unknown / Not a cattle":
                 st.error("🚫 Uncertain Identification")
                 st.warning("Low confidence. Image moved to Learning Lab for review.")
                 img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
