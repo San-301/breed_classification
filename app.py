@@ -107,7 +107,10 @@ def process_and_infer(img_source, user_state):
 
     # Final decision logic
     if top1[1] < 0.6:
-        final_label = "Unknown / Not a cattle"
+        if (top1[1] - top2[1]) < 0.1:
+            final_label = "Possible Hybrid / Unknown Breed"
+        else:
+            final_label = "Unknown / Not a cattle"
     elif (top1[1] - top2[1]) < 0.15:
         final_label = "Ambiguous (Similar breeds)"
     else:
