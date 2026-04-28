@@ -171,7 +171,8 @@ elif app_mode == "Breed Analyzer":
         st.image(img_file, use_container_width=True)
 
         if st.button("Predict"):
-                
+
+            img = Image.open(img_file).convert("RGB")  # ✅ FIX
             boxes = detect_animals(img)
     
             if len(boxes) == 0:
@@ -217,8 +218,9 @@ elif app_mode == "Breed Analyzer":
                         st.write(f"{name} : {score:.2f}")
 
                 st.write("### Probability Distribution")
-                st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
-                
+                for i, box in enumerate(boxes):
+                    st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
+                    
 elif app_mode == "Learning Lab":
     st.title("🧪 Smart Review Lab")
     flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
