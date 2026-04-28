@@ -158,6 +158,8 @@ elif app_mode == "Breed Analyzer":
                 Image.open(img_file).save(img_path)
             elif breed == "Ambiguous (Similar breeds)":
                 st.warning("⚠️ Similar breeds detected. Try clearer image.")
+            elif breed == "Possible Hybrid / Unknown Breed":
+                st.info("🧬 Possible hybrid or unseen breed detected")
             else:
                 data = BREED_DATA[breed]
                 st.markdown(f"""
