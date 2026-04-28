@@ -167,7 +167,7 @@ elif app_mode == "Breed Analyzer":
                 </div>
                 """, unsafe_allow_html=True)
                 st.write("### Top 3 Predictions:")
-                for name, score in top_3:
+                for name, score in top3:
                     st.write(f"{name} : {score:.2f}")
                 st.write("### Probability Distribution")
                 st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
