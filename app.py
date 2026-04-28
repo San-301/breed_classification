@@ -148,7 +148,7 @@ elif app_mode == "Breed Analyzer":
     if img_file:
         st.image(img_file, use_container_width=True)
         if st.button("Predict"):
-            breed, confidence, all_preds = process_and_infer(img_file, user_location)
+            breed, confidence, all_preds, top3 = process_and_infer(img_file, user_location)
             
             if confidence < CONFIDENCE_THRESHOLD:
                 st.error("🚫 Uncertain Identification")
@@ -166,6 +166,9 @@ elif app_mode == "Breed Analyzer":
                     <p><i>{data['Description']}</i></p>
                 </div>
                 """, unsafe_allow_html=True)
+                st.write("### Top 3 Predictions:")
+                for name, score in top_3:
+                    st.write(f"{name} : {score:.2f}")
                 st.write("### Probability Distribution")
                 st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
