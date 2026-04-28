@@ -96,11 +96,23 @@ def process_and_infer(img_source, user_state):
     model = load_optimized_model()
     if model is None: return None, 0, None
         
-    # FIX: Use [0] to extract 1D array to prevent IndexError
+    import numpy as np
+
     preds = model.predict(img_array)[0]
-    top_idx = np.argmax(preds)
-    raw_score = preds[top_idx]
-    breed = CLASS_NAMES[top_idx]
+
+    top_indices = np.argsort(preds)[-3:][::-1]
+
+    top_3 = [(CLASS_NAMES[i], float(preds[i])) for i in top_indices]
+
+    top1, top2 = top_3[0], top_3[1]
+
+    # Final decision logic
+    if top1[1] < 0.6:
+        final_label = "Unknown / Not a cattle"
+    elif (top1[1] - top2[1]) < 0.15:
+        final_label = "Ambiguous (Similar breeds)"
+    else:
+        final_label = top1[0]
 
     # Geospatial impact: Increase confidence if region matches origin
     final_score = raw_score
