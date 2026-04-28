@@ -95,8 +95,6 @@ def process_and_infer(img_source, user_state):
 
     model = load_optimized_model()
     if model is None: return None, 0, None
-        
-    import numpy as np
 
     preds = model.predict(img_array)[0]
 
