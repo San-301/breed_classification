@@ -8,6 +8,11 @@ from ultralytics import YOLO
 import cv2
 os.makedirs("learning_lab", exist_ok=True)
 os.makedirs("training_data", exist_ok=True)
+st.set_page_config(
+    page_title="Bovine Intel Pro",
+    layout="wide",
+    page_icon="🐄"
+)
 
 # =========================
 # LOAD MODELS
@@ -152,7 +157,6 @@ def classify(img):
 # =========================
 # NAVIGATION
 # =========================
-st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐄")
 with st.sidebar:
     st.title("🐄 Bovine Intel")
 
