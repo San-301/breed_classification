@@ -4,3 +4,5 @@ numpy
 Pillow
 opencv-python-headless
 ultralytics
+pip install pdf2image
+apt-get install poppler-utils
