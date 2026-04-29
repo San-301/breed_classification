@@ -129,145 +129,59 @@ def classify(img):
 # =========================
 # UI
 # =========================
-# =========================
-# NAVIGATION
-# =========================
-with st.sidebar:
-    st.title("🐄 Bovine Intel")
-    page = st.radio("Navigate", ["Dashboard", "Breed Analyzer", "Learning Lab"])
+st.set_page_config(layout="wide")
+st.title("🐄 Bovine Intel Pro")
 
-# ensure folder
-os.makedirs("learning_lab", exist_ok=True)
+img_file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
 
-# =========================
-# DASHBOARD
-# =========================
-if page == "Dashboard":
-    st.title("📊 Dashboard")
-    st.write("AI-powered cattle breed detection & classification")
-    st.info("Use Breed Analyzer to detect animals and Learning Lab to improve model.")
+if img_file:
+    img = Image.open(img_file).convert("RGB")
 
-# =========================
-# BREED ANALYZER
-# =========================
-elif page == "Breed Analyzer":
+    if st.button("Analyze"):
 
-    st.title("🔍 Breed Analyzer")
+        boxes, scores = detect_animals(img)
 
-    img_file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"]) \
-        or st.camera_input("Capture Image")
+        if len(boxes) == 0:
+            st.warning("No cows detected")
+            st.stop()
 
-    if img_file:
-        img = Image.open(img_file).convert("RGB")
+        # 🔹 show boxed image
+        boxed = draw_boxes(img, boxes, scores)
+        st.image(boxed, use_container_width=True)
+        st.success(f"{len(boxes)} cows detected")
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.divider()
 
-        if st.button("🚀 Analyze"):
+        # 🔹 GRID VIEW
+        cols = st.columns(3)
 
-            boxes, scores = detect_animals(img)
+        for i, box in enumerate(boxes):
+            x1, y1, x2, y2 = map(int, box)
+            crop = img.crop((x1, y1, x2, y2))
 
-            if len(boxes) == 0:
-                st.warning("No cows detected")
-                st.stop()
-
-            # 🔹 Boxed Image
-            boxed = draw_boxes(img, boxes, scores)
-            st.image(boxed, use_container_width=True)
-            st.success(f"{len(boxes)} cows detected")
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.divider()
-
-            # 🔹 GRID VIEW
-            cols = st.columns(3)
-
-            for i, box in enumerate(boxes):
-                x1, y1, x2, y2 = map(int, box)
-                crop = img.crop((x1, y1, x2, y2))
+            with cols[i % 3]:
+                st.image(crop, use_container_width=True)
 
                 label, conf, preds = classify(crop)
 
-                # 🔥 AUTO SAVE UNKNOWN → LEARNING LAB
+                st.markdown(f"**Animal {i+1}**")
+
                 if "Unknown" in label:
-                    filename = f"learning_lab/unknown_{i}_{np.random.randint(10000)}.jpg"
-                    crop.save(filename)
+                    st.warning("🧬 Hybrid / Unknown")
+                else:
+                    st.success(label)
+                
+                st.caption(f"Confidence: {conf*100:.1f}%")
 
-                with cols[i % 3]:
-                    st.image(crop, use_container_width=True)
-                    st.markdown(f"**Animal {i+1}**")
+        st.divider()
 
-                    if "Unknown" in label:
-                        st.warning("🧬 Hybrid / Unknown")
-                    else:
-                        st.success(label)
-
-                    st.caption(f"Confidence: {conf*100:.1f}%")
-
-            st.divider()
-
-            # 🔹 CHART
-            st.subheader("Prediction Distribution")
-            first_crop = img.crop(tuple(map(int, boxes[0])))
-            _, _, first_preds = classify(first_crop)
-
-            st.bar_chart({
-                CLASS_NAMES[i]: float(first_preds[i])
-                for i in range(len(CLASS_NAMES))
-            })
-
-# =========================
-# LEARNING LAB
-# =========================
-elif page == "Learning Lab":
-
-    st.title("🧪 Learning Lab")
-
-    images = [f for f in os.listdir("learning_lab") if f.endswith(".jpg")]
-
-    if not images:
-        st.info("No unknown samples yet")
-        st.stop()
-
-    selected = st.selectbox("Select Image", images)
-
-    img_path = os.path.join("learning_lab", selected)
-    img = Image.open(img_path)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.image(img, caption="Review Image", use_container_width=True)
-
-    with col2:
-        st.subheader("Annotate")
-
-        label = st.selectbox("Select Correct Breed", ["Unknown"] + CLASS_NAMES)
-
-        # 🔵 Annotate Button
-        if st.button("✅ Save Annotation"):
-            save_dir = f"training_data/{label}"
-            os.makedirs(save_dir, exist_ok=True)
-
-            img.save(os.path.join(save_dir, selected))
-            os.remove(img_path)
-
-            st.success(f"Saved as {label}")
-            st.rerun()
-
-        # 🔴 Delete Button
-        if st.button("🗑 Delete"):
-            os.remove(img_path)
-            st.warning("Deleted")
-            st.rerun()
-
-    st.divider()
-
-    # 📸 Camera Input in Learning Lab
-    st.subheader("Add New Sample")
-
-    cam = st.camera_input("Capture new animal")
-
-    if cam:
-        new_img = Image.open(cam)
-        filename = f"learning_lab/manual_{np.random.randint(10000)}.jpg"
-        new_img.save(filename)
-        st.success("Added to Learning Lab")
-        st.rerun()
+        # 🔹 PROBABILITY CHART (only once)
+        st.subheader("Prediction Distribution")
+        first_crop = img.crop(tuple(map(int, boxes[0])))
+        _, _, first_preds = classify(first_crop)
+        
+        st.bar_chart({
+            CLASS_NAMES[i]: float(first_preds[i])
+            for i in range(len(CLASS_NAMES))
+        })
 st.download_button("Download Report", data="Coming soon")
