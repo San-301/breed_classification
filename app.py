@@ -1,4 +1,6 @@
 import streamlit as st
+from PIL import Image
+import io
 import tensorflow as tf
 from tensorflow.keras.preprocessing import image
 import numpy as np
@@ -6,8 +8,10 @@ import os
 from PIL import Image
 from ultralytics import YOLO
 import cv2
+
 os.makedirs("learning_lab", exist_ok=True)
 os.makedirs("training_data", exist_ok=True)
+
 st.set_page_config(
     page_title="Bovine Intel Pro",
     layout="wide",
@@ -48,8 +52,20 @@ BREED_DATA = {
     "Bhadawari": {"Type": "Buffalo", "Origin": "UP"},
     "Toda": {"Type": "Buffalo", "Origin": "Nilgiris"}
 }
+
 CLASS_NAMES = sorted(BREED_DATA.keys())
 user_location = "Other"
+
+# =========================
+# SAFE IMAGE LOADER (FIXED)
+# =========================
+def safe_load_image(uploaded_file):
+    try:
+        img = Image.open(uploaded_file)
+        img = img.convert("RGB")
+        return img
+    except Exception:
+        return None
 
 # =========================
 # DETECTION
@@ -63,10 +79,9 @@ def detect_animals(img):
 
     animals = []
     for box, cls, score in zip(boxes, classes, scores):
-        if int(cls) == 19:  # cow class
+        if int(cls) == 19:
             animals.append((box, score))
 
-    # sort by confidence
     animals = sorted(animals, key=lambda x: x[1], reverse=True)
 
     final_boxes, final_scores = [], []
@@ -113,7 +128,6 @@ def draw_boxes(img, boxes, scores):
 
         cv2.rectangle(img_np, (x1, y1), (x2, y2), color, 2)
 
-        # ✅ Only confidence (clean UI)
         cv2.putText(
             img_np,
             f"{score:.2f}",
@@ -125,13 +139,14 @@ def draw_boxes(img, boxes, scores):
         )
 
     return img_np
+
 # =========================
-# CLASSIFICATION (OPEN-SET)
+# CLASSIFICATION
 # =========================
 def classify(img, user_location):
     if model is None:
         return "Model Not Loaded", 0.0, np.zeros(len(CLASS_NAMES))
-    
+
     img = img.resize((224,224))
     arr = image.img_to_array(img)
     arr = np.expand_dims(arr, axis=0)
@@ -144,22 +159,18 @@ def classify(img, user_location):
 
     label = CLASS_NAMES[top_idx[0]]
 
-    # 🔥 OPEN SET LOGIC (unchanged)
     if top1 < 0.80 or (top1 - top2) < 0.25:
         return "🧬 Hybrid / Unknown", top1, preds
 
-    # ✅ NEW: GEO BOOST
     if label in BREED_DATA:
         origin = BREED_DATA[label]["Origin"].lower()
         if user_location.lower() in origin:
             top1 = min(top1 + 0.10, 0.99)
+
     return label, top1, preds
 
 # =========================
 # UI
-# =========================
-# =========================
-# NAVIGATION
 # =========================
 with st.sidebar:
     st.title("🐄 Bovine Intel")
@@ -168,12 +179,11 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ✅ Geospatial context
     user_location = st.selectbox(
         "📍 Field Location",
         ["Andhra Pradesh", "Gujarat", "Punjab", "Haryana", "Maharashtra", "Rajasthan", "Other"]
-        )
-                
+    )
+
 # =========================
 # DASHBOARD
 # =========================
@@ -188,55 +198,43 @@ if page == "Dashboard":
 elif page == "Breed Analyzer":
 
     st.title("🔍 Breed Analyzer")
-    
+
     input_type = st.radio(
-    "Select Input Type",
-    ["Upload Image", "Camera"],
-    horizontal=True
+        "Select Input Type",
+        ["Upload Image", "Camera"],
+        horizontal=True
     )
 
     img = None
 
     if input_type == "Upload Image":
-        file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
+        file = st.file_uploader("Upload Image", type=["jpg","png","jpeg","webp","bmp","tiff"])
         if file:
-            img = Image.open(file).convert("RGB")
-    
+            img = safe_load_image(file)
+
     elif input_type == "Camera":
         cam = st.camera_input("Capture Image")
         if cam:
-            img = Image.open(cam).convert("RGB")
-        
+            img = safe_load_image(cam)
+
     if img is not None:
-        
-        try:
-            # ensure valid PIL image
-            if not isinstance(img, Image.Image):
-                img = Image.open(img).convert("RGB")
-    
-            st.image(img, use_container_width=True)
-    
-        except Exception:
-            st.error("⚠ Invalid image. Please re-upload or recapture.")
-            st.stop()
-            st.image(img, use_container_width=True)
+
+        st.image(img, use_container_width=True)
 
         if st.button("🚀 Analyze", use_container_width=True):
-          
+
             boxes, scores = detect_animals(img)
 
             if len(boxes) == 0:
                 st.warning("No cows detected")
                 st.stop()
 
-            # 🔹 Boxed Image
             boxed = draw_boxes(img, boxes, scores)
             st.image(boxed, use_container_width=True)
+
             st.success(f"{len(boxes)} cows detected")
-            st.markdown("<br>", unsafe_allow_html=True)
             st.divider()
 
-            # 🔹 GRID VIEW
             cols = st.columns(3)
 
             for i, box in enumerate(boxes):
@@ -245,7 +243,6 @@ elif page == "Breed Analyzer":
 
                 label, conf, preds = classify(crop, user_location)
 
-                # 🔥 AUTO SAVE UNKNOWN → LEARNING LAB
                 if "Unknown" in label:
                     filename = f"learning_lab/unknown_{i}_{np.random.randint(10000)}.jpg"
                     if not os.path.exists(filename):
@@ -264,12 +261,12 @@ elif page == "Breed Analyzer":
 
             st.divider()
 
-            # 🔹 CHART
             st.subheader("Prediction Distribution")
+
             if len(boxes) > 0:
                 first_crop = img.crop(tuple(map(int, boxes[0])))
                 _, _, first_preds = classify(first_crop, user_location)
-            
+
                 st.bar_chart({
                     CLASS_NAMES[i]: float(first_preds[i])
                     for i in range(len(CLASS_NAMES))
@@ -282,7 +279,7 @@ elif page == "Learning Lab":
 
     st.title("🧪 Learning Lab")
 
-    images = [f for f in os.listdir("learning_lab") if f.endswith(".jpg")]
+    images = [f for f in os.listdir("learning_lab") if f.lower().endswith((".jpg",".jpeg",".png"))]
 
     if not images:
         st.info("No unknown samples yet")
@@ -304,20 +301,18 @@ elif page == "Learning Lab":
         label = st.selectbox("Select Correct Breed", ["Unknown"] + CLASS_NAMES)
 
         colA, colB = st.columns(2)
-        
-        # 🔵 Annotate Button
+
         with colA:
             if st.button("✅ Save Annotation"):
                 save_dir = f"training_data/{label}"
                 os.makedirs(save_dir, exist_ok=True)
-    
+
                 img.save(os.path.join(save_dir, selected))
                 os.remove(img_path)
-    
+
                 st.success(f"Saved as {label}")
                 st.rerun()
 
-        # 🔴 Delete Button
         with colB:
             if st.button("🗑 Delete"):
                 os.remove(img_path)
@@ -326,7 +321,6 @@ elif page == "Learning Lab":
 
     st.divider()
 
-    # 📸 Camera Input in Learning Lab
     st.subheader("Add New Sample")
 
     cam = st.camera_input("Capture new animal")
@@ -337,5 +331,5 @@ elif page == "Learning Lab":
         new_img.save(filename)
         st.success("Added to Learning Lab")
         st.rerun()
-        
+
 st.download_button("Download Report", data="Coming soon")
