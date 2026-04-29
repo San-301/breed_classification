@@ -94,16 +94,25 @@ def detect_animals(img):
 def draw_boxes(img, boxes, scores):
     img_np = np.array(img)
 
-    for i, (box, score) in enumerate(zip(boxes, scores)):
+    for box, score in zip(boxes, scores):
         x1, y1, x2, y2 = map(int, box)
+
         color = tuple(np.random.randint(0,255,3).tolist())
 
         cv2.rectangle(img_np, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(img_np, f"Cow {i+1} ({score:.2f})",
-                    (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        # ✅ Only confidence (clean UI)
+        cv2.putText(
+            img_np,
+            f"{score:.2f}",
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2
+        )
 
     return img_np
-
 # =========================
 # CLASSIFICATION (OPEN-SET)
 # =========================
