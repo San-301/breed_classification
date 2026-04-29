@@ -6,7 +6,7 @@ import os
 from PIL import Image
 from ultralytics import YOLO
 import cv2
-
+st.set_page_config(page_title="Bovine Intel Pro", layout="wide")
 # =========================
 # LOAD MODELS
 # =========================
@@ -129,8 +129,6 @@ def classify(img):
 # =========================
 # UI
 # =========================
-st.set_page_config(layout="wide")
-st.title("🐄 Bovine Intel Pro")
 
 img_file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
 
