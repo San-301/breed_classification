@@ -209,7 +209,17 @@ elif page == "Breed Analyzer":
         
     if img is not None:
         
-        st.image(img, use_container_width=True)
+        try:
+            # ensure valid PIL image
+            if not isinstance(img, Image.Image):
+                img = Image.open(img).convert("RGB")
+    
+            st.image(img, use_container_width=True)
+    
+        except Exception:
+            st.error("⚠ Invalid image. Please re-upload or recapture.")
+            st.stop()
+            st.image(img, use_container_width=True)
 
         if st.button("🚀 Analyze", use_container_width=True):
           
