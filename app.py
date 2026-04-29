@@ -129,9 +129,15 @@ def classify(img):
 
     label = CLASS_NAMES[top_idx[0]]
 
-    # 🔥 OPEN SET LOGIC
+    # 🔥 OPEN SET LOGIC (unchanged)
     if top1 < 0.80 or (top1 - top2) < 0.25:
         return "🧬 Hybrid / Unknown", top1, preds
+
+    # ✅ NEW: GEO BOOST
+    if label in BREED_DATA:
+        origin = BREED_DATA[label]["Origin"].lower()
+        if user_location.lower() in origin:
+            top1 = min(top1 + 0.10, 0.99)
 
     return label, top1, preds
 
@@ -163,11 +169,34 @@ elif page == "Breed Analyzer":
 
     st.title("🔍 Breed Analyzer")
 
-    img_file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"]) \
-        or st.camera_input("Capture Image")
-
-    if img_file:
-        img = Image.open(img_file).convert("RGB")
+        input_type = st.radio(
+        "Select Input Type",
+        ["Upload Image", "Camera", "Upload PDF"],
+        horizontal=True
+    )
+    
+    img = None
+    
+    if input_type == "Upload Image":
+        file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
+        if file:
+            img = Image.open(file).convert("RGB")
+    
+    elif input_type == "Camera":
+        cam = st.camera_input("Capture Image")
+        if cam:
+            img = Image.open(cam).convert("RGB")
+    
+    elif input_type == "Upload PDF":
+        pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
+    
+    if pdf_file:
+        from pdf2image import convert_from_bytes
+        pages = convert_from_bytes(pdf_file.read(), first_page=1, last_page=1)
+        img = pages[0].convert("RGB")
+        
+    if img is not None:
+        st.image(img, use_container_width=True)
 
         if st.button("🚀 Analyze"):
 
@@ -279,4 +308,16 @@ elif page == "Learning Lab":
         new_img.save(filename)
         st.success("Added to Learning Lab")
         st.rerun()
+        
+with st.sidebar:
+    st.title("🐄 Bovine Intel")
+    page = st.radio("Navigate", ["Dashboard", "Breed Analyzer", "Learning Lab"])
+
+    st.markdown("---")
+
+    # ✅ NEW: Geospatial context
+    user_location = st.selectbox(
+        "📍 Field Location",
+        ["Andhra Pradesh", "Gujarat", "Punjab", "Haryana", "Maharashtra", "Rajasthan", "Other"]
+    )
 st.download_button("Download Report", data="Coming soon")
