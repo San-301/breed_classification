@@ -10,7 +10,7 @@ import cv2
 # =========================
 # LOAD MODELS
 # =========================
-yolo_model = YOLO("yolov8s.pt")
+yolo_model = YOLO("yolov8m.pt")
 
 MODEL_PATH = "breed_classifier_mobilenet (2).h5"
 
@@ -43,7 +43,7 @@ CLASS_NAMES = sorted(BREED_DATA.keys())
 # DETECTION
 # =========================
 def detect_animals(img):
-    results = yolo_model(img, conf=0.3, iou=0.5)
+    results = yolo_model(img, conf=0.25, iou=0.45)
 
     boxes = results[0].boxes.xyxy.cpu().numpy()
     classes = results[0].boxes.cls.cpu().numpy()
@@ -121,7 +121,7 @@ def classify(img):
     label = CLASS_NAMES[top_idx[0]]
 
     # 🔥 OPEN SET LOGIC
-    if top1 < 0.75 or (top1 - top2) < 0.2:
+    if top1 < 0.80 or (top1 - top2) < 0.25:
         return "🧬 Hybrid / Unknown", top1, preds
 
     return label, top1, preds
@@ -149,7 +149,7 @@ if img_file:
         boxed = draw_boxes(img, boxes, scores)
         st.image(boxed, use_container_width=True)
         st.success(f"{len(boxes)} cows detected")
-
+        st.markdown("<br>", unsafe_allow_html=True)
         st.divider()
 
         # 🔹 GRID VIEW
@@ -164,15 +164,24 @@ if img_file:
 
                 label, conf, preds = classify(crop)
 
+                st.markdown(f"**Animal {i+1}**")
+
                 if "Unknown" in label:
-                    st.warning(label)
+                    st.warning("🧬 Hybrid / Unknown")
                 else:
                     st.success(label)
-
+                
                 st.caption(f"Confidence: {conf*100:.1f}%")
 
         st.divider()
 
         # 🔹 PROBABILITY CHART (only once)
         st.subheader("Prediction Distribution")
-        st.bar_chart({CLASS_NAMES[i]: float(preds[i]) for i in range(len(CLASS_NAMES))})
+        first_crop = img.crop(tuple(map(int, boxes[0])))
+        _, _, first_preds = classify(first_crop)
+        
+        st.bar_chart({
+            CLASS_NAMES[i]: float(first_preds[i])
+            for i in range(len(CLASS_NAMES))
+        })
+st.download_button("Download Report", data="Coming soon")
