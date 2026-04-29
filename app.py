@@ -12,7 +12,7 @@ os.makedirs("training_data", exist_ok=True)
 # =========================
 # LOAD MODELS
 # =========================
-yolo_model = YOLO("yolov8m.pt")
+yolo_model = YOLO("yolov8n.pt")
 
 MODEL_PATH = "breed_classifier_mobilenet (2).h5"
 
