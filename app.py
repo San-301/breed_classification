@@ -6,6 +6,8 @@ import os
 from PIL import Image
 from ultralytics import YOLO
 import cv2
+os.makedirs("learning_lab", exist_ok=True)
+os.makedirs("training_data", exist_ok=True)
 
 # =========================
 # LOAD MODELS
@@ -117,6 +119,9 @@ def draw_boxes(img, boxes, scores):
 # CLASSIFICATION (OPEN-SET)
 # =========================
 def classify(img):
+    if model is None:
+        return "Model Not Loaded", 0.0, np.zeros(len(CLASS_NAMES))
+    
     img = img.resize((224,224))
     arr = image.img_to_array(img)
     arr = np.expand_dims(arr, axis=0)
@@ -136,7 +141,7 @@ def classify(img):
     # ✅ NEW: GEO BOOST
     if label in BREED_DATA:
         origin = BREED_DATA[label]["Origin"].lower()
-        if user_location.lower() in origin:
+        if user_location.lower() in origin.lower():
             top1 = min(top1 + 0.10, 0.99)
 
     return label, top1, preds
@@ -147,12 +152,19 @@ def classify(img):
 # =========================
 # NAVIGATION
 # =========================
+st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐄")
 with st.sidebar:
     st.title("🐄 Bovine Intel")
+
     page = st.radio("Navigate", ["Dashboard", "Breed Analyzer", "Learning Lab"])
 
-# ensure folder
-os.makedirs("learning_lab", exist_ok=True)
+    st.markdown("---")
+
+    # ✅ Geospatial context
+    user_location = st.selectbox(
+        "📍 Field Location",
+        ["Andhra Pradesh", "Gujarat", "Punjab", "Haryana", "Maharashtra", "Rajasthan", "Other"]
+    )
 
 # =========================
 # DASHBOARD
@@ -168,37 +180,30 @@ if page == "Dashboard":
 elif page == "Breed Analyzer":
 
     st.title("🔍 Breed Analyzer")
-
+    
     input_type = st.radio(
-        "Select Input Type",
-        ["Upload Image", "Camera", "Upload PDF"],
-        horizontal=True
+    "Select Input Type",
+    ["Upload Image", "Camera"],
+    horizontal=True
     )
-    
+
     img = None
-    
+
     if input_type == "Upload Image":
         file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
         if file:
             img = Image.open(file).convert("RGB")
-    
+
     elif input_type == "Camera":
         cam = st.camera_input("Capture Image")
         if cam:
             img = Image.open(cam).convert("RGB")
-    
-    elif input_type == "Upload PDF":
-        pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
-    
-    if pdf_file:
-        from pdf2image import convert_from_bytes
-        pages = convert_from_bytes(pdf_file.read(), first_page=1, last_page=1)
-        img = pages[0].convert("RGB")
+        
         
     if img is not None:
         st.image(img, use_container_width=True)
 
-        if st.button("🚀 Analyze"):
+        if st.button("🚀 Analyze", use_container_width=True):
 
             boxes, scores = detect_animals(img)
 
@@ -225,7 +230,8 @@ elif page == "Breed Analyzer":
                 # 🔥 AUTO SAVE UNKNOWN → LEARNING LAB
                 if "Unknown" in label:
                     filename = f"learning_lab/unknown_{i}_{np.random.randint(10000)}.jpg"
-                    crop.save(filename)
+                    if not os.path.exists(filename):
+                        crop.save(filename)
 
                 with cols[i % 3]:
                     st.image(crop, use_container_width=True)
@@ -278,29 +284,34 @@ elif page == "Learning Lab":
 
         label = st.selectbox("Select Correct Breed", ["Unknown"] + CLASS_NAMES)
 
+        colA, colB = st.columns(2)
+        
         # 🔵 Annotate Button
-        if st.button("✅ Save Annotation"):
-            save_dir = f"training_data/{label}"
-            os.makedirs(save_dir, exist_ok=True)
+        with colA:
+            if st.button("✅ Save Annotation"):
+                save_dir = f"training_data/{label}"
+                os.makedirs(save_dir, exist_ok=True)
+    
+                img.save(os.path.join(save_dir, selected))
+                os.remove(img_path)
+    
+                st.success(f"Saved as {label}")
+                st.rerun()
 
-            img.save(os.path.join(save_dir, selected))
-            os.remove(img_path)
-
-            st.success(f"Saved as {label}")
-            st.rerun()
-
+        with colB:
         # 🔴 Delete Button
-        if st.button("🗑 Delete"):
-            os.remove(img_path)
-            st.warning("Deleted")
-            st.rerun()
+            if st.button("🗑 Delete"):
+                os.remove(img_path)
+                st.warning("Deleted")
+                st.rerun()
 
     st.divider()
 
     # 📸 Camera Input in Learning Lab
     st.subheader("Add New Sample")
 
-    cam = st.camera_input("Capture new animal")
+    if cam is not None:
+        cam = st.camera_input("Capture new animal")
 
     if cam:
         new_img = Image.open(cam)
@@ -309,15 +320,4 @@ elif page == "Learning Lab":
         st.success("Added to Learning Lab")
         st.rerun()
         
-with st.sidebar:
-    st.title("🐄 Bovine Intel")
-    page = st.radio("Navigate", ["Dashboard", "Breed Analyzer", "Learning Lab"])
-
-    st.markdown("---")
-
-    # ✅ NEW: Geospatial context
-    user_location = st.selectbox(
-        "📍 Field Location",
-        ["Andhra Pradesh", "Gujarat", "Punjab", "Haryana", "Maharashtra", "Rajasthan", "Other"]
-    )
 st.download_button("Download Report", data="Coming soon")
