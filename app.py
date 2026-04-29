@@ -169,7 +169,7 @@ elif page == "Breed Analyzer":
 
     st.title("🔍 Breed Analyzer")
 
-        input_type = st.radio(
+    input_type = st.radio(
         "Select Input Type",
         ["Upload Image", "Camera", "Upload PDF"],
         horizontal=True
