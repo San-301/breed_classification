@@ -218,55 +218,58 @@ elif page == "Breed Analyzer":
             img = safe_load_image(cam)
 
     # SAFE IMAGE DISPLAY
-        if img is not None:
-            try:
-                if not isinstance(img, Image.Image):
-                    img = Image.open(img)
-        
-                img = img.convert("RGB")
-                st.image(img)
-        
-            except Exception:
-                st.error("⚠ Invalid image format. Please upload a clear image.")
-                st.stop()        
+    if img is not None:
+    
+        try:
+            if not isinstance(img, Image.Image):
+                img = Image.open(img)
+    
+            img = img.convert("RGB")
+    
+            st.image(img, use_container_width=True)
+    
+        except Exception:
+            st.error("⚠ Invalid image format. Please upload a clear image.")
+            st.stop()
+    
         if st.button("🚀 Analyze", use_container_width=True):
-
+    
             boxes, scores = detect_animals(img)
-
+    
             if len(boxes) == 0:
                 st.warning("No cows detected")
                 st.stop()
-
+    
             boxed = draw_boxes(img, boxes, scores)
             st.image(boxed, use_container_width=True)
-
+    
             st.success(f"{len(boxes)} cows detected")
             st.divider()
-
+    
             cols = st.columns(3)
-
+    
             for i, box in enumerate(boxes):
                 x1, y1, x2, y2 = map(int, box)
                 crop = img.crop((x1, y1, x2, y2))
-
+    
                 label, conf, preds = classify(crop, user_location)
-
+    
                 if "Unknown" in label:
                     filename = f"learning_lab/unknown_{i}_{np.random.randint(10000)}.jpg"
                     if not os.path.exists(filename):
                         crop.save(filename)
-
+    
                 with cols[i % 3]:
                     st.image(crop, use_container_width=True)
                     st.markdown(f"**Animal {i+1}**")
-
+    
                     if "Unknown" in label:
                         st.warning("🧬 Hybrid / Unknown")
                     else:
                         st.success(label)
-
-                    st.caption(f"Confidence: {conf*100:.1f}%")
-
+    
+                    st.caption(f"Confidence: {conf*100:.1f}%")   
+                    
             st.divider()
 
             st.subheader("Prediction Distribution")
