@@ -88,21 +88,58 @@ def load_optimized_model():
     if os.path.exists(MODEL_PATH):
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
+
+def remove_overlapping_boxes(boxes, iou_threshold=0.5):
+    filtered = []
+
+    for box in boxes:
+        x1, y1, x2, y2 = box
+        keep = True
+
+        for f in filtered:
+            fx1, fy1, fx2, fy2 = f
+
+            # Compute IoU
+            inter_x1 = max(x1, fx1)
+            inter_y1 = max(y1, fy1)
+            inter_x2 = min(x2, fx2)
+            inter_y2 = min(y2, fy2)
+
+            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+
+            box_area = (x2 - x1) * (y2 - y1)
+            f_area = (fx2 - fx1) * (fy2 - fy1)
+
+            union = box_area + f_area - inter_area
+
+            iou = inter_area / union if union > 0 else 0
+
+            if iou > iou_threshold:
+                keep = False
+                break
+
+        if keep:
+            filtered.append(box)
+
+    return filtered
     
 def detect_animals(img):
-    results = yolo_model(img)
+    results = yolo_model(img, conf = 0.6)
 
     boxes = results[0].boxes.xyxy.cpu().numpy()
     classes = results[0].boxes.cls.cpu().numpy()
-
+    scores = results[0].boxes.conf.cpu().numpy()
+    
     animal_boxes = []
 
-    for box, cls in zip(boxes, classes):
+    for box, cls, score in zip(boxes, classes, scores):
         label = int(cls)
 
         # YOLO class IDs for animals (cow = 19, etc.)
-        if label in [19]:  # cow class
+        if label == 19 and score > 0.6 :  # cow class
             animal_boxes.append(box)
+            
+    animal_boxes = remove_overlapping_boxes(animal_boxes)
 
     return animal_boxes
     
