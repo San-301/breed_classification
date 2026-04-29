@@ -217,10 +217,18 @@ elif page == "Breed Analyzer":
         if cam:
             img = safe_load_image(cam)
 
-    if img is not None:
-
-        st.image(img, use_container_width=True)
-
+    # SAFE IMAGE DISPLAY
+        if img is not None:
+            try:
+                if not isinstance(img, Image.Image):
+                    img = Image.open(img)
+        
+                img = img.convert("RGB")
+                st.image(img)
+        
+            except Exception:
+                st.error("⚠ Invalid image format. Please upload a clear image.")
+                st.stop()        
         if st.button("🚀 Analyze", use_container_width=True):
 
             boxes, scores = detect_animals(img)
