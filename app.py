@@ -6,6 +6,9 @@ import os
 import time
 import shutil
 from PIL import Image
+from ultralytics import YOLO
+
+yolo_model = YOLO("yolov8n.pt")  # lightweight model
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION & DATA
@@ -85,9 +88,29 @@ def load_optimized_model():
     if os.path.exists(MODEL_PATH):
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
+    
+def detect_animals(img):
+    results = yolo_model(img)
 
+    boxes = results[0].boxes.xyxy.cpu().numpy()
+    classes = results[0].boxes.cls.cpu().numpy()
+
+    animal_boxes = []
+
+    for box, cls in zip(boxes, classes):
+        label = int(cls)
+
+        # YOLO class IDs for animals (cow = 19, etc.)
+        if label in [19]:  # cow class
+            animal_boxes.append(box)
+
+    return animal_boxes
+    
 def process_and_infer(img_source, user_state):
-    img = Image.open(img_source).convert('RGB')
+    if isinstance(img_source, Image.Image):
+        img = img_source.convert('RGB')
+    else:
+        img = Image.open(img_source).convert('RGB')
     img_resized = img.resize((224, 224))
     img_array = image.img_to_array(img_resized)
     img_array = np.expand_dims(img_array, axis=0)
@@ -95,9 +118,7 @@ def process_and_infer(img_source, user_state):
 
     model = load_optimized_model()
     if model is None: return None, 0, None
-
-    preds = model.predict(img_array)[0]
-
+        
     preds = model.predict(img_array)[0]
 
     top_indices = np.argsort(preds)[-3:][::-1]
@@ -148,35 +169,58 @@ elif app_mode == "Breed Analyzer":
 
     if img_file:
         st.image(img_file, use_container_width=True)
-        if st.button("Predict"):
-            breed, confidence, all_preds, top3 = process_and_infer(img_file, user_location)
-            
-            if  breed == "Unknown / Not a cattle":
-                st.error("🚫 Uncertain Identification")
-                st.warning("Low confidence. Image moved to Learning Lab for review.")
-                img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
-                Image.open(img_file).save(img_path)
-            elif breed == "Ambiguous (Similar breeds)":
-                st.warning("⚠️ Similar breeds detected. Try clearer image.")
-            elif breed == "Possible Hybrid / Unknown Breed":
-                st.info("🧬 Possible hybrid or unseen breed detected")
-            else:
-                data = BREED_DATA[breed]
-                st.markdown(f"""
-                <div class="result-card">
-                    <span class="info-tag">{data['Type'].upper()}</span>
-                    <h2 style="color:#2e7d32; margin-top:10px;">{breed}</h2>
-                    <p><b>Confidence:</b> {confidence*100:.1f}%</p>
-                    <p><b>Origin:</b> {data['Origin']}</p>
-                    <p><i>{data['Description']}</i></p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.write("### Top 3 Predictions:")
-                for name, score in top3:
-                    st.write(f"{name} : {score:.2f}")
-                st.write("### Probability Distribution")
-                st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
+        if st.button("Predict"):
+
+            img = Image.open(img_file).convert("RGB")  # ✅ FIX
+            boxes = detect_animals(img)
+    
+            if len(boxes) == 0:
+                st.warning("No animals detected")
+    
+            else:
+                for i, box in enumerate(boxes):
+                    x1, y1, x2, y2 = map(int, box)
+                    cropped = img.crop((x1, y1, x2, y2))
+    
+                    st.image(cropped, caption=f"Animal {i+1}", width=200)
+    
+                    breed, confidence, all_preds, top3 = process_and_infer(cropped, user_location)
+    
+                    st.write(f"### Animal {i+1}")
+    
+                    # ✅ Handle all cases INSIDE loop
+                    if breed == "Unknown / Not a cattle":
+                        st.error("🚫 Not a cattle or unclear image")
+    
+                    elif breed == "Ambiguous (Similar breeds)":
+                        st.warning("⚠️ Similar breeds detected")
+    
+                    elif breed == "Possible Hybrid / Unknown Breed":
+                        st.info("🧬 Possible hybrid breed")
+    
+                    else:
+                        data = BREED_DATA[breed]
+    
+                        st.markdown(f"""
+                        <div class="result-card">
+                            <span class="info-tag">{data['Type'].upper()}</span>
+                            <h2 style="color:#2e7d32;">{breed}</h2>
+                            <p><b>Confidence:</b> {confidence*100:.1f}%</p>
+                            <p><b>Origin:</b> {data['Origin']}</p>
+                            <p><i>{data['Description']}</i></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+    
+                    # ✅ Always show Top-3
+                    st.write("Top 3 Predictions:")
+                    for name, score in top3:
+                        st.write(f"{name} : {score:.2f}")
+
+                st.write("### Probability Distribution")
+                for i, box in enumerate(boxes):
+                    st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
+                    
 elif app_mode == "Learning Lab":
     st.title("🧪 Smart Review Lab")
     flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
