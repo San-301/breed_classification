@@ -17,7 +17,11 @@ st.set_page_config(
 # =========================
 # LOAD MODELS
 # =========================
-yolo_model = YOLO("yolov8n.pt")
+@st.cache_resource
+def load_yolo():
+    return YOLO("yolov8n.pt")
+
+yolo_model = load_yolo()
 
 MODEL_PATH = "breed_classifier_mobilenet (2).h5"
 
@@ -45,6 +49,7 @@ BREED_DATA = {
     "Toda": {"Type": "Buffalo", "Origin": "Nilgiris"}
 }
 CLASS_NAMES = sorted(BREED_DATA.keys())
+user_location = "Other"
 
 # =========================
 # DETECTION
@@ -123,7 +128,7 @@ def draw_boxes(img, boxes, scores):
 # =========================
 # CLASSIFICATION (OPEN-SET)
 # =========================
-def classify(img):
+def classify(img, user_location):
     if model is None:
         return "Model Not Loaded", 0.0, np.zeros(len(CLASS_NAMES))
     
@@ -146,9 +151,8 @@ def classify(img):
     # ✅ NEW: GEO BOOST
     if label in BREED_DATA:
         origin = BREED_DATA[label]["Origin"].lower()
-        if user_location.lower() in origin.lower():
+        if user_location.lower() in origin:
             top1 = min(top1 + 0.10, 0.99)
-
     return label, top1, preds
 
 # =========================
@@ -168,8 +172,8 @@ with st.sidebar:
     user_location = st.selectbox(
         "📍 Field Location",
         ["Andhra Pradesh", "Gujarat", "Punjab", "Haryana", "Maharashtra", "Rajasthan", "Other"]
-    )
-
+        )
+                
 # =========================
 # DASHBOARD
 # =========================
@@ -197,18 +201,18 @@ elif page == "Breed Analyzer":
         file = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
         if file:
             img = Image.open(file).convert("RGB")
-
+    
     elif input_type == "Camera":
         cam = st.camera_input("Capture Image")
         if cam:
             img = Image.open(cam).convert("RGB")
         
-        
     if img is not None:
+        
         st.image(img, use_container_width=True)
 
         if st.button("🚀 Analyze", use_container_width=True):
-
+          
             boxes, scores = detect_animals(img)
 
             if len(boxes) == 0:
@@ -229,7 +233,7 @@ elif page == "Breed Analyzer":
                 x1, y1, x2, y2 = map(int, box)
                 crop = img.crop((x1, y1, x2, y2))
 
-                label, conf, preds = classify(crop)
+                label, conf, preds = classify(crop, user_location)
 
                 # 🔥 AUTO SAVE UNKNOWN → LEARNING LAB
                 if "Unknown" in label:
@@ -252,13 +256,14 @@ elif page == "Breed Analyzer":
 
             # 🔹 CHART
             st.subheader("Prediction Distribution")
-            first_crop = img.crop(tuple(map(int, boxes[0])))
-            _, _, first_preds = classify(first_crop)
-
-            st.bar_chart({
-                CLASS_NAMES[i]: float(first_preds[i])
-                for i in range(len(CLASS_NAMES))
-            })
+            if len(boxes) > 0:
+                first_crop = img.crop(tuple(map(int, boxes[0])))
+                _, _, first_preds = classify(first_crop, user_location)
+            
+                st.bar_chart({
+                    CLASS_NAMES[i]: float(first_preds[i])
+                    for i in range(len(CLASS_NAMES))
+                })
 
 # =========================
 # LEARNING LAB
@@ -302,8 +307,8 @@ elif page == "Learning Lab":
                 st.success(f"Saved as {label}")
                 st.rerun()
 
-        with colB:
         # 🔴 Delete Button
+        with colB:
             if st.button("🗑 Delete"):
                 os.remove(img_path)
                 st.warning("Deleted")
@@ -314,8 +319,7 @@ elif page == "Learning Lab":
     # 📸 Camera Input in Learning Lab
     st.subheader("Add New Sample")
 
-    if cam is not None:
-        cam = st.camera_input("Capture new animal")
+    cam = st.camera_input("Capture new animal")
 
     if cam:
         new_img = Image.open(cam)
