@@ -249,9 +249,20 @@ elif app_mode == "Analyzer":
         except:
             st.error("Invalid image file")
             st.stop()
+
         display_img = enhance_display_image(img)
-        st.image(display_img, use_container_width=True)
-        
+
+        # SIDE BY SIDE UI
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### 📥 Input Image")
+            st.image(display_img, use_container_width=True)
+
+        with col2:
+            st.markdown("### 🧠 Detection Output")
+            output_placeholder = st.empty()  # placeholder
+
         if st.button("Analyze"):
 
             with st.spinner("Analyzing..."):
@@ -261,25 +272,32 @@ elif app_mode == "Analyzer":
                 if len(boxes) == 0:
                     st.error("🚫 No cows and buffaloes detected")
                 else:
-                    # Draw global image
-                    st.markdown("### 🧠 Detection Output")
+                    # DRAW OUTPUT
                     boxed = draw_boxes(img, boxes, scores)
-                    st.image(boxed.resize((900, 600)), use_container_width=True)
-                    
-                    cols = st.columns(len(boxes))
-                    
-                    results_list = []   # ✅ store results once
-                    
+                    boxed_display = enhance_display_image(boxed)
+
+                    with col2:
+                        output_placeholder.image(boxed_display, use_container_width=True)
+
+                    # LIMIT GRID SIZE (better UX)
+                    st.markdown("---")
+                    st.markdown("### 🐄 Detected Animals")
+
+                    cols = st.columns(min(len(boxes), 4))
+
+                    results_list = []
+
                     for idx, (box, col) in enumerate(zip(boxes, cols)):
                         x1, y1, x2, y2 = map(int, box)
-                        crop = img.crop((x1, y1, x2, y2)).resize((250, 250))
-                    
+                        crop = img.crop((x1, y1, x2, y2)).resize((300, 300))
+
                         label, conf, preds = classify(crop, user_location)
-                    
-                        results_list.append((idx+1, label, conf))  # ✅ store once
-                    
+
+                        results_list.append((idx+1, label, conf))
+
                         with col:
                             color = "green" if conf > 0.75 else "orange" if conf > 0.6 else "red"
+
                             st.markdown(
                                 f"""
                                 <div style="
@@ -291,39 +309,28 @@ elif app_mode == "Analyzer":
                                 """,
                                 unsafe_allow_html=True
                             )
-                    
+
                             st.image(crop)
-                    
                             st.markdown(f"### {label}")
                             st.markdown(f"Confidence: **{conf*100:.1f}%**")
-                    
+
+                            # ✅ CHART INSIDE CARD (clean UX)
+                            if label not in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]:
+                                chart_data = {
+                                    CLASS_NAMES[j]: float(preds[j])
+                                    for j in range(len(CLASS_NAMES))
+                                }
+                                st.bar_chart(chart_data)
+
                             st.markdown("</div>", unsafe_allow_html=True)
-                    
-                            # Flag wrong cases
-                            if label in ["Unknown","Possible Hybrid Breed","Ambiguous"]:
+
+                            # FLAG UNCERTAIN CASES
+                            if label in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
-                    
-                    valid_results = [r for r in results_list if r[1] not in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]]
 
-                    if len(valid_results) > 0:
-                        # ======================
-                        # 📊 PROBABILITY SECTION (CLEAN)
-                        # ======================
-                        st.markdown("### 📊 Probability Distribution")
-                        
-                        for idx, (box) in enumerate(boxes):
-                            x1, y1, x2, y2 = map(int, box)
-                            crop = img.crop((x1, y1, x2, y2)).resize((224,224))
-                        
-                            _, _, preds = classify(crop, user_location)
-                        
-                            st.markdown(f"**Animal {idx+1}**")
-                            chart_data = {CLASS_NAMES[j]: float(preds[j]) for j in range(len(CLASS_NAMES))}
-                            st.bar_chart(chart_data)
-                    
                     # ======================
-                    # 📥 REPORT DOWNLOAD (OPTIMIZED)
+                    # 📥 REPORT DOWNLOAD
                     # ======================
                     report = [
                         {
@@ -333,17 +340,17 @@ elif app_mode == "Analyzer":
                         }
                         for r in results_list
                     ]
-                    
+
                     df = pd.DataFrame(report)
                     csv = df.to_csv(index=False).encode("utf-8")
-                    
+
+                    st.markdown("---")
                     st.download_button(
                         "📥 Download Report",
                         csv,
                         "report.csv",
                         "text/csv"
                     )
-                    
 
 # ==============================
 # LEARNING LAB
