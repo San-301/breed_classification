@@ -103,7 +103,7 @@ def classify(img, user_location):
     top1, top2 = preds[top_idx[0]], preds[top_idx[1]]
 
     # Decision logic
-    if top1 < 0.6:
+    if top1 < 0.7:
         if (top1 - top2) < 0.1:
             label = "Hybrid"
         else:
