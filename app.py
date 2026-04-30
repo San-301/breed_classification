@@ -26,6 +26,16 @@ BREED_DATA = {
     "Kankrej": {}, "Murrah": {}, "Nagpuri": {},
     "Ongole": {}, "Red_Sindhi": {}, "Sahiwal": {}, "Toda": {}
 }
+
+BREED_ORIGIN = {
+    "Murrah": ["haryana", "punjab"],
+    "Gir": ["gujarat"],
+    "Sahiwal": ["punjab"],
+    "Ongole": ["andhra"],
+    "Kankrej": ["gujarat", "rajasthan"],
+    "Nagpuri": ["maharashtra"],
+}
+
 CLASS_NAMES = sorted(BREED_DATA.keys())
 
 # ==============================
@@ -113,19 +123,20 @@ def classify(img, user_location):
     # Decision logic
     if top1 < 0.65:
         if (top1 - top2) < 0.12:
-            label = "Hybrid"
+            label = "Possible Hybrid Breed"
         else:
             label = "Unknown"
     elif (top1 - top2) < 0.18:
-        label = "Hybrid"
+        label = "Possible Hybrid Breed"
     else:
         label = CLASS_NAMES[top_idx[0]]
+
    
     confidence = float(top1)
 
     # Geo boost
-    if label in BREED_DATA:
-        if user_location.lower() in label.lower():
+    if label in BREED_ORIGIN:
+        if any(loc in user_location.lower() for loc in BREED_ORIGIN[label]):
             confidence = min(confidence + 0.1, 0.99)
 
     return label, confidence, preds
@@ -134,17 +145,72 @@ def classify(img, user_location):
 # UI CONFIG
 # ==============================
 st.set_page_config(layout="wide")
+st.markdown("""
+<style>
+div.stButton > button {
+    border-radius:8px;
+    font-weight:bold;
+}
+
+/* Submit = Blue */
+div[data-testid="column"]:nth-of-type(1) button {
+    background-color:#1e40af !important;
+    color:white !important;
+}
+
+/* Delete = Red */
+div[data-testid="column"]:nth-of-type(2) button {
+    background-color:#dc3545 !important;
+    color:white !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 with st.sidebar:
     app_mode = st.radio("Menu", ["Dashboard", "Analyzer", "Learning Lab"])
-    user_location = st.selectbox("Location", ["Andhra Pradesh","Gujarat","Punjab","Other"])
-
+    user_location = st.selectbox(
+    "Location",
+    ["Andhra Pradesh","Gujarat","Punjab","Haryana","Rajasthan","Maharashtra","Other"]
+    )
 # ==============================
 # DASHBOARD
 # ==============================
 if app_mode == "Dashboard":
     st.title("🐄 Bovine Intelligence System")
-    st.write("Detect and classify cattle breeds")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("""
+        ### 📸 Smart Detection  
+        Detect cows & buffaloes using YOLOv8  
+        """)
+
+    with col2:
+        st.markdown("""
+        ### 🧠 Breed Classification  
+        Identify 10 Indian breeds using AI  
+        """)
+
+    with col3:
+        st.markdown("""
+        ### 🔄 Learning System  
+        Improve model with user feedback  
+        """)
+
+    st.markdown("---")
+
+    st.markdown("""
+    ### 🚀 How it works
+    1. Upload or capture image  
+    2. Detect animals automatically  
+    3. Classify breed using AI  
+    4. Review uncertain cases in Learning Lab  
+    """)
+
+    st.markdown("---")
+
+    st.success("✔ Supports multiple animals | ✔ Hybrid detection | ✔ Download reports")
 
 # ==============================
 # ANALYZER
@@ -189,10 +255,11 @@ elif app_mode == "Analyzer":
                         results_list.append((idx+1, label, conf))  # ✅ store once
                     
                         with col:
+                            color = "green" if conf > 0.75 else "orange" if conf > 0.6 else "red"
                             st.markdown(
-                                """
+                                f"""
                                 <div style="
-                                    border:{'green' if conf>0.75 else 'orange' if conf>0.6 else 'red'} 2px solid;
+                                    border:2px solid {color};
                                     border-radius:10px;
                                     padding:10px;
                                     text-align:center;
@@ -209,10 +276,10 @@ elif app_mode == "Analyzer":
                             st.markdown("</div>", unsafe_allow_html=True)
                     
                             # Flag wrong cases
-                            if label in ["Unknown","Hybrid","Ambiguous"]:
+                            if label in ["Unknown","Possible Hybrid Breed","Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
-                    if label not in ["Unknown", "Hybrid", "Ambiguous"]:
+                    if label not in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]:
                         # ======================
                         # 📊 PROBABILITY SECTION (CLEAN)
                         # ======================
