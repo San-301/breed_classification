@@ -57,27 +57,44 @@ def detect_animals(img):
     classes = results[0].boxes.cls.cpu().numpy()
     scores = results[0].boxes.conf.cpu().numpy()
 
-    img_area = img.size[0] * img.size[1]
+    img_w, img_h = img.size
+    img_area = img_w * img_h
+
+    center_x, center_y = img_w / 2, img_h / 2
 
     candidates = []
 
     for box, cls, score in zip(boxes, classes, scores):
-        if int(cls) == 19:
+        if int(cls) == 19:  # cow class
             x1, y1, x2, y2 = box
-            area = (x2 - x1) * (y2 - y1)
 
-            # 🚨 STRONG PRIORITY (area dominant)
+            area = (x2 - x1) * (y2 - y1)
             area_ratio = area / img_area
 
-            # Penalize small detections heavily
+            # ❌ remove very small detections
             if area_ratio < 0.05:
                 continue
 
-            priority = (area_ratio * 0.7) + (score * 0.3)
+            # 🎯 CENTER DISTANCE (VERY IMPORTANT)
+            box_center_x = (x1 + x2) / 2
+            box_center_y = (y1 + y2) / 2
+
+            dist = np.sqrt((box_center_x - center_x)**2 + (box_center_y - center_y)**2)
+
+            # normalize distance (lower = better)
+            max_dist = np.sqrt(center_x**2 + center_y**2)
+            center_score = 1 - (dist / max_dist)
+
+            # ✅ FINAL PRIORITY (BEST MIX)
+            priority = (
+                area_ratio * 0.5 +     # size matters
+                score * 0.2 +          # confidence
+                center_score * 0.3     # 🔥 center bias
+            )
 
             candidates.append((box, score, priority))
 
-    # Sort by priority
+    # sort best first
     candidates = sorted(candidates, key=lambda x: x[2], reverse=True)
 
     final_boxes = [c[0] for c in candidates]
