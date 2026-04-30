@@ -61,35 +61,39 @@ def detect_animals(img):
     img_area = img_w * img_h
 
     center_x, center_y = img_w / 2, img_h / 2
+    max_dist = np.sqrt(center_x**2 + center_y**2)
 
     candidates = []
 
     for box, cls, score in zip(boxes, classes, scores):
-        if int(cls) == 19:  # cow class
+        if int(cls) == 19:
             x1, y1, x2, y2 = box
 
-            area = (x2 - x1) * (y2 - y1)
+            w = x2 - x1
+            h = y2 - y1
+            area = w * h
             area_ratio = area / img_area
 
             # ❌ remove very small detections
             if area_ratio < 0.05:
                 continue
 
-            # 🎯 CENTER DISTANCE (VERY IMPORTANT)
-            box_center_x = (x1 + x2) / 2
-            box_center_y = (y1 + y2) / 2
-
-            dist = np.sqrt((box_center_x - center_x)**2 + (box_center_y - center_y)**2)
-
-            # normalize distance (lower = better)
-            max_dist = np.sqrt(center_x**2 + center_y**2)
+            # 🎯 center distance
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            dist = np.sqrt((cx - center_x)**2 + (cy - center_y)**2)
             center_score = 1 - (dist / max_dist)
 
-            # ✅ FINAL PRIORITY (BEST MIX)
+            # 🎯 aspect ratio (front animals more square)
+            aspect_ratio = w / h if h != 0 else 0
+            aspect_score = 1 - abs(aspect_ratio - 1)  # closer to square = better
+
+            # 🔥 FINAL PRIORITY (HEAVILY CENTER BIASED)
             priority = (
-                area_ratio * 0.5 +     # size matters
-                score * 0.2 +          # confidence
-                center_score * 0.3     # 🔥 center bias
+                center_score * 0.5 +   # strongest
+                area_ratio * 0.3 +     # medium
+                aspect_score * 0.1 +   # helps front animal
+                score * 0.1            # least important
             )
 
             candidates.append((box, score, priority))
@@ -97,10 +101,14 @@ def detect_animals(img):
     # sort best first
     candidates = sorted(candidates, key=lambda x: x[2], reverse=True)
 
-    final_boxes = [c[0] for c in candidates]
-    final_scores = [c[1] for c in candidates]
+    if len(candidates) == 0:
+        return [], []
 
-    return final_boxes, final_scores
+    # ✅ TAKE ONLY BEST ONE (IMPORTANT FIX)
+    best_box = candidates[0][0]
+    best_score = candidates[0][1]
+
+    return [best_box], [best_score]
 # ==============================
 # DRAW BOXES
 # ==============================
