@@ -1,316 +1,214 @@
 import streamlit as st
 import tensorflow as tf
+import cv2
 from tensorflow.keras.preprocessing import image
 import numpy as np
 import os
 import time
-import shutil
 from PIL import Image
 from ultralytics import YOLO
- 
 
-yolo_model = YOLO("yolov8s.pt")  # lightweight model
+# ==============================
+# LOAD MODELS
+# ==============================
+yolo_model = YOLO("yolov8s.pt")
 
-# ==========================================
-# 1. SYSTEM CONFIGURATION & DATA
-# ==========================================
-MODEL_PATH = "breed_classifier_mobilenet (2).h5" 
-CONFIDENCE_THRESHOLD = 0.58 
+MODEL_PATH = "breed_classifier_mobilenet (2).h5"
 
-# Ensure local directories exist for GitHub/Streamlit Cloud
-for folder in ["flagged_for_learning", "training_queue"]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+# Create folders
+os.makedirs("flagged_for_learning", exist_ok=True)
+os.makedirs("training_queue", exist_ok=True)
 
+# Breed data
 BREED_DATA = {
-    "Bhadawari": {"Type": "Buffalo", "Origin": "UP & MP", "Description": "High-fat milk breed, heat-tolerant."},
-    "Gir": {"Type": "Cattle", "Origin": "Gujarat", "Description": "High milk-yielding indigenous breed."},
-    "Jaffarabadi": {"Type": "Buffalo", "Origin": "Gujarat", "Description": "Large-sized dairy buffalo."},
-    "Kankrej": {"Type": "Cattle", "Origin": "Gujarat & Rajasthan", "Description": "Dual-purpose breed for milk and draught."},
-    "Murrah": {"Type": "Buffalo", "Origin": "Haryana & Punjab", "Description": "High-fat milk producing buffalo."},
-    "Nagpuri": {"Type": "Buffalo", "Origin": "Maharashtra", "Description": "Drought-resistant dairy buffalo."},
-    "Ongole": {"Type": "Cattle", "Origin": "Andhra Pradesh", "Description": "Large breed used for draught and milk."},
-    "Red_Sindhi": {"Type": "Cattle", "Origin": "Sindh region", "Description": "Adapted for tropical climates."},
-    "Sahiwal": {"Type": "Cattle", "Origin": "Punjab", "Description": "Heat-tolerant dairy breed."},
-    "Toda": {"Type": "Buffalo", "Origin": "Nilgiri Hills", "Description": "Small-sized buffalo, adapted to hilly terrain."}
+    "Bhadawari": {}, "Gir": {}, "Jaffarabadi": {},
+    "Kankrej": {}, "Murrah": {}, "Nagpuri": {},
+    "Ongole": {}, "Red_Sindhi": {}, "Sahiwal": {}, "Toda": {}
 }
 CLASS_NAMES = sorted(BREED_DATA.keys())
 
-# ==========================================
-# 2. UI STYLING (Forced White Sidebar Text)
-# ==========================================
-st.set_page_config(page_title="Bovine Intel Pro", layout="wide", page_icon="🐂")
-
-st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    .stSidebar { background-color: #111; border-right: 2px solid #2e7d32; }
-    
-    /* FORCE SIDEBAR TEXT TO WHITE */
-    section[data-testid="stSidebar"] .st-emotion-cache-17l6ba3, 
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] span {
-        color: white !important;
-        font-weight: 500 !important;
-    }
-
-    /* Global Style for all buttons (Default Green) */
-    div.stButton > button {
-        background-color: #2e7d32 !important;
-        color: white !important;
-        border-radius: 8px !important;
-        border: none !important;
-        height: 3.5em !important;
-        width: 100% !important;
-        font-weight: bold !important;
-    }
-
-    /* Target FIRST Column Button (Submit Review -> BLUE) */
-    div[data-testid="column"]:nth-of-type(1) button {
-        background-color: #1e40af !important;
-    }
-
-    /* Target SECOND Column Button (Delete -> RED) */
-    div[data-testid="column"]:nth-of-type(2) button {
-        background-color: #dc3545 !important;
-    }
-
-    /* Professional Card Styling */
-    .result-card { background: white; padding: 25px; border-radius: 12px; border-left: 10px solid #2e7d32; box-shadow: 0 4px 20px rgba(0,0,0,0.1); color: #333; }
-    .info-tag { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
-    
-    img { image-rendering: auto; border-radius: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
+# ==============================
+# LOAD MODEL
+# ==============================
 @st.cache_resource
-def load_optimized_model():
+def load_model():
     if os.path.exists(MODEL_PATH):
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
 
-
-def draw_boxes(image, boxes):
-    img_np = np.array(image)
-
-    for i, box in enumerate(boxes):
-        x1, y1, x2, y2 = map(int, box)
-        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(img_np, f"Cow {i+1}", (x1, y1-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
-
-    return img_np    
+# ==============================
+# YOLO DETECTION
+# ==============================
 def detect_animals(img):
-    results = yolo_model(
-        img,
-        conf=0.25,   # lower → detect all cows
-        iou=0.45     # built-in overlap removal
-    )
+    results = yolo_model(img, conf=0.25)
 
     boxes = results[0].boxes.xyxy.cpu().numpy()
     classes = results[0].boxes.cls.cpu().numpy()
     scores = results[0].boxes.conf.cpu().numpy()
 
-    animal_boxes = []
+    cow_boxes = []
+    cow_scores = []
 
     for box, cls, score in zip(boxes, classes, scores):
-        if int(cls) == 19:  # cow
-            animal_boxes.append((box, score))
+        if int(cls) == 19:  # cow class
+            cow_boxes.append(box)
+            cow_scores.append(score)
 
-    # ✅ SORT by confidence (important)
-    animal_boxes = sorted(animal_boxes, key=lambda x: x[1], reverse=True)
+    return cow_boxes, cow_scores
 
-    # ✅ KEEP ONLY TOP UNIQUE BOXES
-    final_boxes = []
-    for box, score in animal_boxes:
-        x1, y1, x2, y2 = box
+# ==============================
+# DRAW BOXES
+# ==============================
+def draw_boxes(img, boxes, scores):
+    img_np = np.array(img)
 
-        keep = True
-        for fb in final_boxes:
-            fx1, fy1, fx2, fy2 = fb
+    for box, score in zip(boxes, scores):
+        x1, y1, x2, y2 = map(int, box)
 
-            # IoU calculation
-            inter_x1 = max(x1, fx1)
-            inter_y1 = max(y1, fy1)
-            inter_x2 = min(x2, fx2)
-            inter_y2 = min(y2, fy2)
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0,255,0), 2)
+        cv2.putText(img_np, f"{score*100:.1f}%", (x1, y1-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
 
-            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
-            area1 = (x2 - x1) * (y2 - y1)
-            area2 = (fx2 - fx1) * (fy2 - fy1)
+    return img_np
 
-            union = area1 + area2 - inter_area
-            iou = inter_area / union if union > 0 else 0
+# ==============================
+# CLASSIFICATION
+# ==============================
+def classify(img, user_location):
+    model = load_model()
+    if model is None:
+        return None, 0, None
 
-            if iou > 0.5:
-                keep = False
-                break
+    img = img.resize((224,224))
+    arr = image.img_to_array(img)
+    arr = np.expand_dims(arr, axis=0)
+    arr = tf.keras.applications.mobilenet.preprocess_input(arr)
 
-        if keep:
-            final_boxes.append(box)
+    preds = model.predict(arr)[0]
 
-    return final_boxes
-    
-def process_and_infer(img_source, user_state):
-    if isinstance(img_source, Image.Image):
-        img = img_source.convert('RGB')
-    else:
-        img = Image.open(img_source).convert('RGB')
-    img_resized = img.resize((224, 224))
-    img_array = image.img_to_array(img_resized)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = tf.keras.applications.mobilenet.preprocess_input(img_array)
+    top_idx = np.argsort(preds)[-3:][::-1]
+    top1, top2 = preds[top_idx[0]], preds[top_idx[1]]
 
-    model = load_optimized_model()
-    if model is None: return None, 0, None
-        
-    preds = model.predict(img_array)[0]
-
-    top_indices = np.argsort(preds)[-3:][::-1]
-    top_3 = [(CLASS_NAMES[i], float(preds[i])) for i in top_indices]
-
-    top1, top2 = top_3[0], top_3[1]
-
-    # Final decision logic
-    if top1[1] < 0.6:
-        if (top1[1] - top2[1]) < 0.1:
-            final_label = "Possible Hybrid / Unknown Breed"
+    # Decision logic
+    if top1 < 0.6:
+        if (top1 - top2) < 0.1:
+            label = "Hybrid"
         else:
-            final_label = "Unknown / Not a cattle"
-    elif (top1[1] - top2[1]) < 0.15:
-        final_label = "Ambiguous (Similar breeds)"
+            label = "Unknown"
+    elif (top1 - top2) < 0.15:
+        label = "Ambiguous"
     else:
-        final_label = top1[0]
+        label = CLASS_NAMES[top_idx[0]]
 
-    # Use top1 confidence as base
-    final_score = top1[1]
-    
-    # Apply geospatial ONLY if valid breed
-    if final_label in BREED_DATA:
-        if user_state.lower() in BREED_DATA[final_label]['Origin'].lower():
-            final_score = min(final_score + 0.12, 0.99)
-    
-    return final_label, final_score, preds, top_3
-# ==========================================
-# 3. APP INTERFACE
-# ==========================================
+    confidence = float(top1)
+
+    # Geo boost
+    if label in BREED_DATA:
+        if user_location.lower() in label.lower():
+            confidence = min(confidence + 0.1, 0.99)
+
+    return label, confidence, preds
+
+# ==============================
+# UI CONFIG
+# ==============================
+st.set_page_config(layout="wide")
+
 with st.sidebar:
-    st.title("Home")
-    app_mode = st.radio("Go To:", ["Dashboard", "Breed Analyzer", "Learning Lab"])
-    st.markdown("---")
-    user_location = st.selectbox("Current Field Location", 
-                                ["Andhra Pradesh", "Gujarat", "Haryana", "Maharashtra", "Punjab", "Rajasthan", "Other"])
+    app_mode = st.radio("Menu", ["Dashboard", "Analyzer", "Learning Lab"])
+    user_location = st.selectbox("Location", ["Andhra Pradesh","Gujarat","Punjab","Other"])
 
+# ==============================
+# DASHBOARD
+# ==============================
 if app_mode == "Dashboard":
-    st.title("Indian Livestock Intelligence")
-    st.write("Professional breed identification using geospatial context.")
-    st.write("This Breed Analyzer is used for classification of Indian Cows and Buffaloes")
+    st.title("🐄 Bovine Intelligence System")
+    st.write("Detect and classify cattle breeds")
 
-elif app_mode == "Breed Analyzer":
-    st.title("🔍 Breed Analysis")
-    input_type = st.radio("Input Source:", ["Upload File", "Camera"], horizontal=True)
-    
-    img_file = st.file_uploader("Upload image", type=["jpg", "png", "jpeg"]) if input_type == "Upload File" else st.camera_input("Capture photo")
+# ==============================
+# ANALYZER
+# ==============================
+elif app_mode == "Analyzer":
 
-    if img_file:
-        st.image(img_file, use_container_width=True)
+    st.title("🔍 Breed Analyzer")
 
-        if st.button("Predict"):
+    input_type = st.radio("Input", ["Upload", "Camera"], horizontal=True)
 
-            img = Image.open(img_file).convert("RGB")  # ✅ FIX
-            boxes = detect_animals(img)
-    
-            if len(boxes) == 0:
-                st.warning("No animals detected")
-    
-            else:
-                for i, box in enumerate(boxes):
-                    x1, y1, x2, y2 = map(int, box)
-                    cropped = img.crop((x1, y1, x2, y2))
-    
-                    st.image(cropped, caption=f"Animal {i+1}", width=200)
-    
-                    breed, confidence, all_preds, top3 = process_and_infer(cropped, user_location)
-    
-                    st.write(f"### Animal {i+1}")
-    
-                    # ✅ Handle all cases INSIDE loop
-                    if breed == "Unknown / Not a cattle":
-                        st.error("🚫 Not a cattle or unclear image")
-    
-                    elif breed == "Ambiguous (Similar breeds)":
-                        st.warning("⚠️ Similar breeds detected")
-    
-                    elif breed == "Possible Hybrid / Unknown Breed":
-                        st.info("🧬 Possible hybrid breed")
-    
-                    else:
-                        data = BREED_DATA[breed]
-    
-                        st.markdown(f"""
-                        <div class="result-card">
-                            <span class="info-tag">{data['Type'].upper()}</span>
-                            <h2 style="color:#2e7d32;">{breed}</h2>
-                            <p><b>Confidence:</b> {confidence*100:.1f}%</p>
-                            <p><b>Origin:</b> {data['Origin']}</p>
-                            <p><i>{data['Description']}</i></p>
-                        </div>
-                        """, unsafe_allow_html=True)
+    file = st.file_uploader("Upload Image", type=["jpg","png"]) \
+        if input_type=="Upload" else st.camera_input("Capture")
 
-                    boxed_img = draw_boxes(img, boxes)
-                    st.image(boxed_img, caption="Detected Animals", use_container_width=True)
-                    # ✅ Always show Top-3
-                    st.write("Top 3 Predictions:")
-                    for name, score in top3:
-                        st.write(f"{name} : {score:.2f}")
+    if file:
+        img = Image.open(file).convert("RGB")
+        st.image(img, use_container_width=True)
 
-                st.write("### Probability Distribution")
-                st.write("### Probability Distribution")
-                st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
-                
+        if st.button("Analyze"):
+
+            with st.spinner("Analyzing..."):
+
+                boxes, scores = detect_animals(img)
+
+                if len(boxes) == 0:
+                    st.error("🚫 No cows detected")
+                else:
+
+                    # Draw global image
+                    boxed = draw_boxes(img, boxes, scores)
+                    st.image(boxed, caption="Detected")
+
+                    cols = st.columns(len(boxes))
+
+                    for i,(box,col) in enumerate(zip(boxes, cols)):
+                        x1,y1,x2,y2 = map(int, box)
+                        crop = img.crop((x1,y1,x2,y2))
+
+                        label, conf, preds = classify(crop, user_location)
+
+                        with col:
+                            st.image(crop)
+
+                            st.write(f"Confidence: {conf*100:.1f}%")
+
+                            # Flag wrong cases
+                            if label in ["Unknown","Hybrid","Ambiguous"]:
+                                path = f"flagged_for_learning/{time.time()}.jpg"
+                                crop.save(path)
+
+# ==============================
+# LEARNING LAB
+# ==============================
 elif app_mode == "Learning Lab":
-    st.title("🧪 Smart Review Lab")
-    flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-    
-    if flagged_images:
-        col_v, col_t = st.columns(2)
-        with col_v:
-            selected_img = st.selectbox("Select image:", flagged_images)
-            img_path = os.path.join("flagged_for_learning", selected_img)
-            raw_img = Image.open(img_path)
-            st.image(raw_img, caption="Flagged Image")
-        
-        with col_t:
-            st.subheader("Focus Tool")
-            zoom = st.slider("Focus Level", 50, 100, 100)
-            final_img = raw_img
-            if zoom < 100:
-                w, h = raw_img.size
-                l = (w * (100 - zoom) / 200)
-                t = (h * (100 - zoom) / 200)
-                final_img = raw_img.crop((l, t, w-l, h-t))
-                st.image(final_img, caption="Cropped Focus")
-                
-            new_label = st.selectbox("Correct Breed:", ["Unknown"] + CLASS_NAMES)
-            
-            btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                # BLUE BUTTON
-                if st.button("Submit Review"):
-                    target_dir = os.path.join("training_queue", new_label)
-                    os.makedirs(target_dir, exist_ok=True)
-                    final_img.save(os.path.join(target_dir, f"rev_{selected_img}"))
-                    os.remove(img_path)
-                    st.success(f"Verified as {new_label}. AI Updated!")
-                    time.sleep(1)
-                    st.rerun()
-            with btn_col2:
-                # RED BUTTON
-                if st.button("🗑️ Delete"):
-                    os.remove(img_path)
-                    st.warning("Permanently deleted.")
-                    time.sleep(1)
-                    st.rerun()
+
+    st.title("🧪 Learning Lab")
+
+    images = os.listdir("flagged_for_learning")
+
+    if not images:
+        st.info("No flagged images")
     else:
-        st.info("No images for review. Your dataset is clean!")
+        selected = st.selectbox("Select Image", images)
+
+        path = os.path.join("flagged_for_learning", selected)
+        img = Image.open(path)
+
+        st.image(img)
+
+        label = st.selectbox("Correct Label", ["Unknown"]+CLASS_NAMES)
+
+        c1,c2 = st.columns(2)
+
+        with c1:
+            if st.button("Submit"):
+                save_dir = f"training_queue/{label}"
+                os.makedirs(save_dir, exist_ok=True)
+
+                img.save(f"{save_dir}/{selected}")
+                os.remove(path)
+
+                st.success("Saved")
+                st.rerun()
+
+        with c2:
+            if st.button("Delete"):
+                os.remove(path)
+                st.warning("Deleted")
+                st.rerun()
