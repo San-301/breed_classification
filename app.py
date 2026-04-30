@@ -163,26 +163,28 @@ elif app_mode == "Analyzer":
                 if len(boxes) == 0:
                     st.error("🚫 No cows detected")
                 else:
-
                     # Draw global image
                     st.markdown("### 🧠 Detection Output")
                     boxed = draw_boxes(img, boxes, scores)
                     st.image(boxed, use_container_width=True)
-                    st.markdown(f"**{label}**")
-
+                    
                     cols = st.columns(len(boxes))
-
-                    for i, (box, col) in enumerate(zip(boxes, cols)):
+                    
+                    results_list = []   # ✅ store results once
+                    
+                    for idx, (box, col) in enumerate(zip(boxes, cols)):
                         x1, y1, x2, y2 = map(int, box)
-                        crop = img.crop((x1, y1, x2, y2)).resize((250, 250))  # SAME SIZE
+                        crop = img.crop((x1, y1, x2, y2)).resize((250, 250))
                     
                         label, conf, preds = classify(crop, user_location)
                     
+                        results_list.append((idx+1, label, conf))  # ✅ store once
+                    
                         with col:
                             st.markdown(
-                                f"""
+                                """
                                 <div style="
-                                    border:2px solid #2e7d32;
+                                    border:{'green' if conf>0.75 else 'orange' if conf>0.6 else 'red'} 2px solid;
                                     border-radius:10px;
                                     padding:10px;
                                     text-align:center;
@@ -197,15 +199,49 @@ elif app_mode == "Analyzer":
                             st.markdown(f"Confidence: **{conf*100:.1f}%**")
                     
                             st.markdown("</div>", unsafe_allow_html=True)
-                            
-                            
+                    
                             # Flag wrong cases
                             if label in ["Unknown","Hybrid","Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
-
-                            chart_data = {CLASS_NAMES[i]: float(preds[i]) for i in range(len(CLASS_NAMES))}
-                            st.bar_chart(chart_data)
+                    
+                    # ======================
+                    # 📊 PROBABILITY SECTION (CLEAN)
+                    # ======================
+                    st.markdown("### 📊 Probability Distribution")
+                    
+                    for idx, (box) in enumerate(boxes):
+                        x1, y1, x2, y2 = map(int, box)
+                        crop = img.crop((x1, y1, x2, y2)).resize((224,224))
+                    
+                        _, _, preds = classify(crop, user_location)
+                    
+                        st.markdown(f"**Animal {idx+1}**")
+                        chart_data = {CLASS_NAMES[j]: float(preds[j]) for j in range(len(CLASS_NAMES))}
+                        st.bar_chart(chart_data)
+                    
+                    # ======================
+                    # 📥 REPORT DOWNLOAD (OPTIMIZED)
+                    # ======================
+                    report = [
+                        {
+                            "Animal": r[0],
+                            "Prediction": r[1],
+                            "Confidence": f"{r[2]*100:.2f}%"
+                        }
+                        for r in results_list
+                    ]
+                    
+                    df = pd.DataFrame(report)
+                    csv = df.to_csv(index=False).encode("utf-8")
+                    
+                    st.download_button(
+                        "📥 Download Report",
+                        csv,
+                        "report.csv",
+                        "text/csv"
+                    )
+                    
 
 # ==============================
 # LEARNING LAB
@@ -246,28 +282,3 @@ elif app_mode == "Learning Lab":
                 os.remove(path)
                 st.warning("Deleted")
                 st.rerun()
-
-report = []
-
-for i, (box) in enumerate(boxes):
-    x1,y1,x2,y2 = map(int, box)
-    crop = img.crop((x1,y1,x2,y2))
-
-    label, conf, preds = classify(crop, user_location)
-
-    report.append({
-        "Animal": i+1,
-        "Prediction": label,
-        "Confidence": f"{conf*100:.2f}%"
-    })
-
-df = pd.DataFrame(report)
-
-csv = df.to_csv(index=False).encode("utf-8")
-
-st.download_button(
-    "📥 Download Report",
-    csv,
-    "report.csv",
-    "text/csv"
-)
