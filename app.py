@@ -213,20 +213,20 @@ elif app_mode == "Analyzer":
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
                     
-                    # ======================
-                    # 📊 PROBABILITY SECTION (CLEAN)
-                    # ======================
-                    st.markdown("### 📊 Probability Distribution")
-                    
-                    for idx, (box) in enumerate(boxes):
-                        x1, y1, x2, y2 = map(int, box)
-                        crop = img.crop((x1, y1, x2, y2)).resize((224,224))
-                    
-                        _, _, preds = classify(crop, user_location)
-                    
-                        st.markdown(f"**Animal {idx+1}**")
-                        chart_data = {CLASS_NAMES[j]: float(preds[j]) for j in range(len(CLASS_NAMES))}
-                        if label not in ["Unknown", "Hybrid", "Ambiguous"]:
+                     if label not in ["Unknown", "Hybrid", "Ambiguous"]:
+                        # ======================
+                        # 📊 PROBABILITY SECTION (CLEAN)
+                        # ======================
+                        st.markdown("### 📊 Probability Distribution")
+                        
+                        for idx, (box) in enumerate(boxes):
+                            x1, y1, x2, y2 = map(int, box)
+                            crop = img.crop((x1, y1, x2, y2)).resize((224,224))
+                        
+                            _, _, preds = classify(crop, user_location)
+                        
+                            st.markdown(f"**Animal {idx+1}**")
+                            chart_data = {CLASS_NAMES[j]: float(preds[j]) for j in range(len(CLASS_NAMES))}
                             st.bar_chart(chart_data)
                     
                     # ======================
