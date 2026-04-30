@@ -212,8 +212,7 @@ elif app_mode == "Analyzer":
                             if label in ["Unknown","Hybrid","Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
-                    
-                     if label not in ["Unknown", "Hybrid", "Ambiguous"]:
+                    if label not in ["Unknown", "Hybrid", "Ambiguous"]:
                         # ======================
                         # 📊 PROBABILITY SECTION (CLEAN)
                         # ======================
