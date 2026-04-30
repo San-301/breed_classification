@@ -84,6 +84,18 @@ def detect_animals(img):
     final_scores = [c[1] for c in candidates]
 
     return final_boxes, final_scores
+
+def enhance_display_image(img):
+    # Resize for UI
+    img = img.resize((900, 600))
+
+    # Apply same enhancements as output
+    img = ImageEnhance.Sharpness(img).enhance(1.6)
+    img = ImageEnhance.Contrast(img).enhance(1.2)
+    img = ImageEnhance.Brightness(img).enhance(1.05)
+
+    return img
+    
 # ==============================
 # DRAW BOXES
 # ==============================
@@ -237,7 +249,8 @@ elif app_mode == "Analyzer":
         except:
             st.error("Invalid image file")
             st.stop()
-        st.image(img, use_container_width=True)
+        display_img = enhance_display_image(img)
+        st.image(display_img, use_container_width=True)
         
         if st.button("Analyze"):
 
