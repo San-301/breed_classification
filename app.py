@@ -6,6 +6,10 @@ import os
 import time
 import shutil
 from PIL import Image
+from ultralytics import YOLO
+ 
+
+yolo_model = YOLO("yolov8s.pt")  # lightweight model
 
 # ==========================================
 # 1. SYSTEM CONFIGURATION & DATA
@@ -86,8 +90,73 @@ def load_optimized_model():
         return tf.keras.models.load_model(MODEL_PATH, compile=False)
     return None
 
+
+def draw_boxes(image, boxes):
+    img_np = np.array(image)
+
+    for i, box in enumerate(boxes):
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(img_np, f"Cow {i+1}", (x1, y1-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+    return img_np    
+def detect_animals(img):
+    results = yolo_model(
+        img,
+        conf=0.25,   # lower → detect all cows
+        iou=0.45     # built-in overlap removal
+    )
+
+    boxes = results[0].boxes.xyxy.cpu().numpy()
+    classes = results[0].boxes.cls.cpu().numpy()
+    scores = results[0].boxes.conf.cpu().numpy()
+
+    animal_boxes = []
+
+    for box, cls, score in zip(boxes, classes, scores):
+        if int(cls) == 19:  # cow
+            animal_boxes.append((box, score))
+
+    # ✅ SORT by confidence (important)
+    animal_boxes = sorted(animal_boxes, key=lambda x: x[1], reverse=True)
+
+    # ✅ KEEP ONLY TOP UNIQUE BOXES
+    final_boxes = []
+    for box, score in animal_boxes:
+        x1, y1, x2, y2 = box
+
+        keep = True
+        for fb in final_boxes:
+            fx1, fy1, fx2, fy2 = fb
+
+            # IoU calculation
+            inter_x1 = max(x1, fx1)
+            inter_y1 = max(y1, fy1)
+            inter_x2 = min(x2, fx2)
+            inter_y2 = min(y2, fy2)
+
+            inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+            area1 = (x2 - x1) * (y2 - y1)
+            area2 = (fx2 - fx1) * (fy2 - fy1)
+
+            union = area1 + area2 - inter_area
+            iou = inter_area / union if union > 0 else 0
+
+            if iou > 0.5:
+                keep = False
+                break
+
+        if keep:
+            final_boxes.append(box)
+
+    return final_boxes
+    
 def process_and_infer(img_source, user_state):
-    img = Image.open(img_source).convert('RGB')
+    if isinstance(img_source, Image.Image):
+        img = img_source.convert('RGB')
+    else:
+        img = Image.open(img_source).convert('RGB')
     img_resized = img.resize((224, 224))
     img_array = image.img_to_array(img_resized)
     img_array = np.expand_dims(img_array, axis=0)
@@ -96,19 +165,33 @@ def process_and_infer(img_source, user_state):
     model = load_optimized_model()
     if model is None: return None, 0, None
         
-    # FIX: Use [0] to extract 1D array to prevent IndexError
     preds = model.predict(img_array)[0]
-    top_idx = np.argmax(preds)
-    raw_score = preds[top_idx]
-    breed = CLASS_NAMES[top_idx]
 
-    # Geospatial impact: Increase confidence if region matches origin
-    final_score = raw_score
-    if user_state.lower() in BREED_DATA[breed]['Origin'].lower():
-        final_score = min(raw_score + 0.12, 0.99) 
+    top_indices = np.argsort(preds)[-3:][::-1]
+    top_3 = [(CLASS_NAMES[i], float(preds[i])) for i in top_indices]
 
-    return breed, final_score, preds
+    top1, top2 = top_3[0], top_3[1]
 
+    # Final decision logic
+    if top1[1] < 0.6:
+        if (top1[1] - top2[1]) < 0.1:
+            final_label = "Possible Hybrid / Unknown Breed"
+        else:
+            final_label = "Unknown / Not a cattle"
+    elif (top1[1] - top2[1]) < 0.15:
+        final_label = "Ambiguous (Similar breeds)"
+    else:
+        final_label = top1[0]
+
+    # Use top1 confidence as base
+    final_score = top1[1]
+    
+    # Apply geospatial ONLY if valid breed
+    if final_label in BREED_DATA:
+        if user_state.lower() in BREED_DATA[final_label]['Origin'].lower():
+            final_score = min(final_score + 0.12, 0.99)
+    
+    return final_label, final_score, preds, top_3
 # ==========================================
 # 3. APP INTERFACE
 # ==========================================
@@ -132,28 +215,60 @@ elif app_mode == "Breed Analyzer":
 
     if img_file:
         st.image(img_file, use_container_width=True)
-        if st.button("Predict"):
-            breed, confidence, all_preds = process_and_infer(img_file, user_location)
-            
-            if confidence < CONFIDENCE_THRESHOLD:
-                st.error("🚫 Uncertain Identification")
-                st.warning("Low confidence. Image moved to Learning Lab for review.")
-                img_path = f"flagged_for_learning/low_conf_{int(time.time())}.jpg"
-                Image.open(img_file).save(img_path)
-            else:
-                data = BREED_DATA[breed]
-                st.markdown(f"""
-                <div class="result-card">
-                    <span class="info-tag">{data['Type'].upper()}</span>
-                    <h2 style="color:#2e7d32; margin-top:10px;">{breed}</h2>
-                    <p><b>Confidence:</b> {confidence*100:.1f}%</p>
-                    <p><b>Origin:</b> {data['Origin']}</p>
-                    <p><i>{data['Description']}</i></p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.write("### Probability Distribution")
-                st.bar_chart({CLASS_NAMES[i]: float(all_preds[i]) for i in range(len(CLASS_NAMES))})
 
+        if st.button("Predict"):
+
+            img = Image.open(img_file).convert("RGB")  # ✅ FIX
+            boxes = detect_animals(img)
+    
+            if len(boxes) == 0:
+                st.warning("No animals detected")
+    
+            else:
+                for i, box in enumerate(boxes):
+                    x1, y1, x2, y2 = map(int, box)
+                    cropped = img.crop((x1, y1, x2, y2))
+    
+                    st.image(cropped, caption=f"Animal {i+1}", width=200)
+    
+                    breed, confidence, all_preds, top3 = process_and_infer(cropped, user_location)
+    
+                    st.write(f"### Animal {i+1}")
+    
+                    # ✅ Handle all cases INSIDE loop
+                    if breed == "Unknown / Not a cattle":
+                        st.error("🚫 Not a cattle or unclear image")
+    
+                    elif breed == "Ambiguous (Similar breeds)":
+                        st.warning("⚠️ Similar breeds detected")
+    
+                    elif breed == "Possible Hybrid / Unknown Breed":
+                        st.info("🧬 Possible hybrid breed")
+    
+                    else:
+                        data = BREED_DATA[breed]
+    
+                        st.markdown(f"""
+                        <div class="result-card">
+                            <span class="info-tag">{data['Type'].upper()}</span>
+                            <h2 style="color:#2e7d32;">{breed}</h2>
+                            <p><b>Confidence:</b> {confidence*100:.1f}%</p>
+                            <p><b>Origin:</b> {data['Origin']}</p>
+                            <p><i>{data['Description']}</i></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    boxed_img = draw_boxes(img, boxes)
+                    st.image(boxed_img, caption="Detected Animals", use_container_width=True)
+                    # ✅ Always show Top-3
+                    st.write("Top 3 Predictions:")
+                    for name, score in top3:
+                        st.write(f"{name} : {score:.2f}")
+
+                st.write("### Probability Distribution")
+                st.write("### Probability Distribution")
+                st.bar_chart({CLASS_NAMES[j]: float(all_preds[j]) for j in range(len(CLASS_NAMES))})
+                
 elif app_mode == "Learning Lab":
     st.title("🧪 Smart Review Lab")
     flagged_images = [f for f in os.listdir("flagged_for_learning") if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
