@@ -169,7 +169,7 @@ elif app_mode == "Analyzer":
                 boxes, scores = detect_animals(img)
 
                 if len(boxes) == 0:
-                    st.error("🚫 No cows detected")
+                    st.error("🚫 No cows and buffaloes detected")
                 else:
                     # Draw global image
                     st.markdown("### 🧠 Detection Output")
