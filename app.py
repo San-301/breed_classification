@@ -47,6 +47,8 @@ def detect_animals(img):
     classes = results[0].boxes.cls.cpu().numpy()
     scores = results[0].boxes.conf.cpu().numpy()
 
+    img_area = img.size[0] * img.size[1]
+
     candidates = []
 
     for box, cls, score in zip(boxes, classes, scores):
@@ -54,12 +56,18 @@ def detect_animals(img):
             x1, y1, x2, y2 = box
             area = (x2 - x1) * (y2 - y1)
 
-            # Combine confidence + size (important)
-            priority = score * 0.6 + (area / (img.size[0]*img.size[1])) * 0.4
+            # 🚨 STRONG PRIORITY (area dominant)
+            area_ratio = area / img_area
+
+            # Penalize small detections heavily
+            if area_ratio < 0.05:
+                continue
+
+            priority = (area_ratio * 0.7) + (score * 0.3)
 
             candidates.append((box, score, priority))
 
-    # Sort by priority (NOT just confidence)
+    # Sort by priority
     candidates = sorted(candidates, key=lambda x: x[2], reverse=True)
 
     final_boxes = [c[0] for c in candidates]
@@ -103,16 +111,16 @@ def classify(img, user_location):
     top1, top2 = preds[top_idx[0]], preds[top_idx[1]]
 
     # Decision logic
-    if top1 < 0.7:
-        if (top1 - top2) < 0.1:
+    if top1 < 0.65:
+        if (top1 - top2) < 0.12:
             label = "Hybrid"
         else:
             label = "Unknown"
-    elif (top1 - top2) < 0.15:
-        label = "Ambiguous"
+    elif (top1 - top2) < 0.18:
+        label = "Hybrid"
     else:
         label = CLASS_NAMES[top_idx[0]]
-
+   
     confidence = float(top1)
 
     # Geo boost
@@ -218,7 +226,8 @@ elif app_mode == "Analyzer":
                     
                         st.markdown(f"**Animal {idx+1}**")
                         chart_data = {CLASS_NAMES[j]: float(preds[j]) for j in range(len(CLASS_NAMES))}
-                        st.bar_chart(chart_data)
+                        if label not in ["Unknown", "Hybrid", "Ambiguous"]:
+                            st.bar_chart(chart_data)
                     
                     # ======================
                     # 📥 REPORT DOWNLOAD (OPTIMIZED)
@@ -270,12 +279,14 @@ elif app_mode == "Learning Lab":
             if st.button("Submit"):
                 save_dir = f"training_queue/{label}"
                 os.makedirs(save_dir, exist_ok=True)
-
+               
                 img.save(f"{save_dir}/{selected}")
+                st.info("Data saved. Model retraining required externally.")
                 os.remove(path)
 
                 st.success("Saved")
                 st.rerun()
+                
 
         with c2:
             if st.button("Delete"):
