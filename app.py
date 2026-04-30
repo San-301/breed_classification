@@ -5,7 +5,7 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 import os
 import time
-from PIL import Image
+from PIL import Image, ImageEnhance
 from ultralytics import YOLO
 import pandas as pd
 
@@ -93,14 +93,21 @@ def draw_boxes(img, boxes, scores):
     for box, score in zip(boxes, scores):
         x1, y1, x2, y2 = map(int, box)
 
-        # thicker + cleaner
-        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 200, 0), 3)
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 255, 0), 3)
 
         label = f"{score*100:.1f}%"
         cv2.putText(img_np, label, (x1, y1-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,200,0), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
 
-    return img_np
+    # Convert back to PIL for enhancement
+    img_pil = Image.fromarray(img_np)
+
+    # 🔥 ENHANCEMENTS
+    img_pil = ImageEnhance.Sharpness(img_pil).enhance(1.8)
+    img_pil = ImageEnhance.Contrast(img_pil).enhance(1.2)
+    img_pil = ImageEnhance.Brightness(img_pil).enhance(1.05)
+
+    return img_pil
 
 # ==============================
 # CLASSIFICATION
@@ -221,13 +228,17 @@ elif app_mode == "Analyzer":
 
     input_type = st.radio("Input", ["Upload", "Camera"], horizontal=True)
 
-    file = st.file_uploader("Upload Image", type=["jpg","png"]) \
+    file = st.file_uploader("Upload Image", type=None) \
         if input_type=="Upload" else st.camera_input("Capture")
 
     if file:
-        img = Image.open(file).convert("RGB")
-        st.image(img, use_container_width=True)
-
+        try:
+            img = Image.open(file).convert("RGB")
+        except:
+            st.error("Invalid image file")
+            st.stop()
+        st.image(boxed.resize((900, 600)), use_container_width=True)
+        
         if st.button("Analyze"):
 
             with st.spinner("Analyzing..."):
