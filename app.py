@@ -237,7 +237,7 @@ elif app_mode == "Analyzer":
         except:
             st.error("Invalid image file")
             st.stop()
-        st.image(boxed.resize((900, 600)), use_container_width=True)
+        st.image(img, use_container_width=True)
         
         if st.button("Analyze"):
 
@@ -251,7 +251,7 @@ elif app_mode == "Analyzer":
                     # Draw global image
                     st.markdown("### 🧠 Detection Output")
                     boxed = draw_boxes(img, boxes, scores)
-                    st.image(boxed, use_container_width=True)
+                    st.image(boxed.resize((900, 600)), use_container_width=True)
                     
                     cols = st.columns(len(boxes))
                     
@@ -290,7 +290,8 @@ elif app_mode == "Analyzer":
                             if label in ["Unknown","Possible Hybrid Breed","Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
-                    if label not in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]:
+                    valid_results = [r for r in results_list if r[1] not in ["Unknown", "Possible Hybrid Breed", "Ambiguous"]]
+                    if len(valid_results) > 0:
                         # ======================
                         # 📊 PROBABILITY SECTION (CLEAN)
                         # ======================
