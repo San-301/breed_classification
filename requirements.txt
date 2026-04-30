@@ -1,6 +1,6 @@
 streamlit
-tensorflow>=2.12,<2.16
-numpy<2.0
+tensorflow==2.16.2
+numpy==1.26.4
 Pillow
 ultralytics
 opencv-python-headless
