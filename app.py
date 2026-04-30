@@ -7,6 +7,7 @@ import os
 import time
 from PIL import Image
 from ultralytics import YOLO
+import pandas as pd
 
 # ==============================
 # LOAD MODELS
@@ -40,22 +41,31 @@ def load_model():
 # YOLO DETECTION
 # ==============================
 def detect_animals(img):
-    results = yolo_model(img, conf=0.25)
+    results = yolo_model(img, conf=0.35)
 
     boxes = results[0].boxes.xyxy.cpu().numpy()
     classes = results[0].boxes.cls.cpu().numpy()
     scores = results[0].boxes.conf.cpu().numpy()
 
-    cow_boxes = []
-    cow_scores = []
+    candidates = []
 
     for box, cls, score in zip(boxes, classes, scores):
-        if int(cls) == 19:  # cow class
-            cow_boxes.append(box)
-            cow_scores.append(score)
+        if int(cls) == 19:
+            x1, y1, x2, y2 = box
+            area = (x2 - x1) * (y2 - y1)
 
-    return cow_boxes, cow_scores
+            # Combine confidence + size (important)
+            priority = score * 0.6 + (area / (img.size[0]*img.size[1])) * 0.4
 
+            candidates.append((box, score, priority))
+
+    # Sort by priority (NOT just confidence)
+    candidates = sorted(candidates, key=lambda x: x[2], reverse=True)
+
+    final_boxes = [c[0] for c in candidates]
+    final_scores = [c[1] for c in candidates]
+
+    return final_boxes, final_scores
 # ==============================
 # DRAW BOXES
 # ==============================
@@ -65,9 +75,12 @@ def draw_boxes(img, boxes, scores):
     for box, score in zip(boxes, scores):
         x1, y1, x2, y2 = map(int, box)
 
-        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0,255,0), 2)
-        cv2.putText(img_np, f"{score*100:.1f}%", (x1, y1-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+        # thicker + cleaner
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 200, 0), 3)
+
+        label = f"{score*100:.1f}%"
+        cv2.putText(img_np, label, (x1, y1-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,200,0), 2)
 
     return img_np
 
@@ -152,26 +165,47 @@ elif app_mode == "Analyzer":
                 else:
 
                     # Draw global image
+                    st.markdown("### 🧠 Detection Output")
                     boxed = draw_boxes(img, boxes, scores)
-                    st.image(boxed, caption="Detected")
+                    st.image(boxed, use_container_width=True)
+                    st.markdown(f"**{label}**")
 
                     cols = st.columns(len(boxes))
 
-                    for i,(box,col) in enumerate(zip(boxes, cols)):
-                        x1,y1,x2,y2 = map(int, box)
-                        crop = img.crop((x1,y1,x2,y2))
-
+                    for i, (box, col) in enumerate(zip(boxes, cols)):
+                        x1, y1, x2, y2 = map(int, box)
+                        crop = img.crop((x1, y1, x2, y2)).resize((250, 250))  # SAME SIZE
+                    
                         label, conf, preds = classify(crop, user_location)
-
+                    
                         with col:
+                            st.markdown(
+                                f"""
+                                <div style="
+                                    border:2px solid #2e7d32;
+                                    border-radius:10px;
+                                    padding:10px;
+                                    text-align:center;
+                                    background:#ffffff;">
+                                """,
+                                unsafe_allow_html=True
+                            )
+                    
                             st.image(crop)
-
-                            st.write(f"Confidence: {conf*100:.1f}%")
-
+                    
+                            st.markdown(f"### {label}")
+                            st.markdown(f"Confidence: **{conf*100:.1f}%**")
+                    
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            
+                            
                             # Flag wrong cases
                             if label in ["Unknown","Hybrid","Ambiguous"]:
                                 path = f"flagged_for_learning/{time.time()}.jpg"
                                 crop.save(path)
+
+                            chart_data = {CLASS_NAMES[i]: float(preds[i]) for i in range(len(CLASS_NAMES))}
+                            st.bar_chart(chart_data)
 
 # ==============================
 # LEARNING LAB
@@ -212,3 +246,28 @@ elif app_mode == "Learning Lab":
                 os.remove(path)
                 st.warning("Deleted")
                 st.rerun()
+
+report = []
+
+for i, (box) in enumerate(boxes):
+    x1,y1,x2,y2 = map(int, box)
+    crop = img.crop((x1,y1,x2,y2))
+
+    label, conf, preds = classify(crop, user_location)
+
+    report.append({
+        "Animal": i+1,
+        "Prediction": label,
+        "Confidence": f"{conf*100:.2f}%"
+    })
+
+df = pd.DataFrame(report)
+
+csv = df.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    "📥 Download Report",
+    csv,
+    "report.csv",
+    "text/csv"
+)
