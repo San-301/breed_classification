@@ -85,11 +85,11 @@ def detect_animals(img):
 
     return final_boxes, final_scores
 
-def enhance_display_image(img):
-    # Resize for UI
-    img = img.resize((900, 600))
 
-    # Apply same enhancements as output
+def enhance_display_image(img):
+    img = img.copy()
+    img.thumbnail((900, 600))
+
     img = ImageEnhance.Sharpness(img).enhance(1.6)
     img = ImageEnhance.Contrast(img).enhance(1.2)
     img = ImageEnhance.Brightness(img).enhance(1.05)
